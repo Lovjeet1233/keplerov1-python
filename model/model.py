@@ -121,3 +121,60 @@ class EmailResponse(BaseModel):
     status: str
     message: str
     receiver_email: str
+
+
+# ============================================================================
+# BULK COMMUNICATION MODELS
+# ============================================================================
+
+class Contact(BaseModel):
+    """Model for a single contact."""
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class SMSBody(BaseModel):
+    """Model for SMS body configuration."""
+    message: str
+
+
+class EmailBody(BaseModel):
+    """Model for Email body configuration."""
+    subject: str
+    body: str
+    is_html: Optional[bool] = False
+
+
+class BulkCommunicationRequest(BaseModel):
+    """Request model for bulk communication endpoint."""
+    contacts: list[Contact]  # List of contacts or single contact in a list
+    communication_types: list[str]  # e.g., ["call", "sms", "email"]
+    sms_body: Optional[SMSBody] = None  # Required if "sms" in communication_types
+    email_body: Optional[EmailBody] = None  # Required if "email" in communication_types
+    # Call-related parameters
+    dynamic_instruction: Optional[str] = None
+    language: Optional[str] = "en"
+    emotion: Optional[str] = "Calm"
+
+
+class ContactResult(BaseModel):
+    """Result for a single contact's communication."""
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    call_status: Optional[str] = None
+    transcript: Optional[dict] = None
+    sms_status: Optional[str] = None
+    email_status: Optional[str] = None
+    created_at: str
+    ended_at: str
+    errors: Optional[dict] = None  # Store any errors that occurred
+
+
+class BulkCommunicationResponse(BaseModel):
+    """Response model for bulk communication endpoint."""
+    status: str
+    message: str
+    total_contacts: int
+    results: list[ContactResult]

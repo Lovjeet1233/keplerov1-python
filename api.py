@@ -17,6 +17,7 @@ from routers.calls import router as calls_router
 from routers.llm import router as llm_router, init_llm_router
 from routers.sms import router as sms_router
 from routers.email import router as email_router
+from routers.bulk_communication import router as bulk_communication_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -90,6 +91,7 @@ app.include_router(calls_router)
 app.include_router(llm_router)
 app.include_router(sms_router)
 app.include_router(email_router)
+app.include_router(bulk_communication_router)
 
 
 @app.get("/")
@@ -113,7 +115,8 @@ async def root():
             "Calls": {
                 "prefix": "/calls",
                 "endpoints": [
-                    "POST /calls/outbound - Initiate an outbound call"
+                    "POST /calls/outbound - Initiate an outbound call",
+                    "POST /calls/outbound-with-escalation - Initiate an outbound call with AI agent and supervisor escalation"
                 ]
             },
             "LLM": {
@@ -133,6 +136,12 @@ async def root():
                 "endpoints": [
                     "POST /email/send - Send email via SMTP"
                 ]
+            },
+            "Bulk Communication": {
+                "prefix": "/bulk-communication",
+                "endpoints": [
+                    "POST /bulk-communication/send - Send bulk communications (calls, SMS, email) to contacts"
+                ]
             }
         }
     }
@@ -149,7 +158,8 @@ async def health_check():
             "calls": "operational",
             "llm": "operational",
             "sms": "operational",
-            "email": "operational"
+            "email": "operational",
+            "bulk_communication": "operational"
         }
     }
 

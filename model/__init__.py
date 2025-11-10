@@ -27,6 +27,14 @@ from .model import (
     # Email models
     EmailRequest,
     EmailResponse,
+    
+    # Bulk Communication models
+    Contact,
+    SMSBody,
+    EmailBody,
+    BulkCommunicationRequest,
+    ContactResult,
+    BulkCommunicationResponse,
 )
 
 __all__ = [
@@ -54,5 +62,13 @@ __all__ = [
     # Email
     "EmailRequest",
     "EmailResponse",
+    
+    # Bulk Communication
+    "Contact",
+    "SMSBody",
+    "EmailBody",
+    "BulkCommunicationRequest",
+    "ContactResult",
+    "BulkCommunicationResponse",
 ]
 

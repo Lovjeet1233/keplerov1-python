@@ -1,250 +1,266 @@
-# Island AI API - Postman Collection Guide
+# Postman Collection Guide
 
-## 📦 Files Included
-
-1. **ISLAND_AI_API.postman_collection.json** - Complete API collection with all endpoints
-2. **ISLAND_AI_API.postman_environment.json** - Environment variables for local development
-
-## 🚀 Getting Started
-
-### Step 1: Import Collection
+## 📦 Import the Collection
 
 1. Open Postman
 2. Click **Import** button (top left)
-3. Drag and drop `ISLAND_AI_API.postman_collection.json` or click to browse
-4. Click **Import**
+3. Select **File** tab
+4. Choose `Island_AI_API.postman_collection.json`
+5. Click **Import**
 
-### Step 2: Import Environment
+## 🔧 Configure Base URL
 
-1. Click the **Environments** tab (left sidebar)
-2. Click **Import**
-3. Select `ISLAND_AI_API.postman_environment.json`
-4. Click **Import**
+The collection uses a variable `{{base_url}}` which is set to `http://localhost:8000` by default.
 
-### Step 3: Select Environment
+### To Change the Base URL:
 
-1. In the top-right corner, click the environment dropdown
-2. Select **ISLAND AI - Local**
+1. Click on the collection name "Island AI API Collection"
+2. Go to **Variables** tab
+3. Change the `base_url` value (e.g., `http://your-server:8000`)
+4. Click **Save**
 
-### Step 4: Start Your API Server
+## 📚 Collection Structure
 
-Make sure your FastAPI server is running:
+The collection is organized into folders:
 
-```bash
-python api.py
+### 1. **Health & Info** (2 endpoints)
+- Root endpoint - Get API information
+- Health check
+
+### 2. **RAG Service** (7 endpoints)
+- Chat with RAG
+- Create Collection
+- Delete Collection
+- Data Ingestion (URL, PDF, Excel)
+- Get Conversation History
+
+### 3. **Calls** (6 endpoints)
+- Basic outbound call
+- Call with custom AI instructions
+- Call in Spanish (multilingual example)
+- **Outbound call with escalation** - Basic
+- **Outbound call with escalation** - Customer Support
+- **Outbound call with escalation** - Sales Follow-up
+
+### 4. **LLM Service** (1 endpoint)
+- Elaborate Prompt
+
+### 5. **SMS** (2 endpoints)
+- Send SMS
+- Send appointment reminder SMS
+
+### 6. **Email** (2 endpoints)
+- Send plain text email
+- Send HTML email
+
+### 7. **Bulk Communication** (6 endpoints)
+- Single contact - all channels (call + SMS + email)
+- Single contact - call only
+- Single contact - SMS & email only
+- Multiple contacts - all channels
+- Multiple contacts - email newsletter
+- Multiple contacts - SMS campaign
+
+## 🚀 Quick Start
+
+### Test the API:
+
+1. **Check if API is running:**
+   - Open `Health & Info` → `Health Check`
+   - Click **Send**
+   - You should see: `"status": "healthy"`
+
+2. **Make your first call:**
+   - Open `Calls` → `Outbound Call - Basic`
+   - Update the `phone_number` in the body
+   - Click **Send**
+
+3. **Try outbound call with escalation:**
+   - First, ensure `outbound.py` agent worker is running
+   - Open `Calls` → `Outbound Call with Escalation - Basic`
+   - Update the `phone_number` in the body
+   - Click **Send**
+   - During the call, say "I want to speak to a supervisor" to test escalation
+
+4. **Send bulk communications:**
+   - Open `Bulk Communication` → `Single Contact - All Channels`
+   - Update contact details
+   - Update SMS and email body
+   - Click **Send**
+
+## 💡 Tips
+
+### 1. **Environment Variables**
+Create a Postman environment for different setups (dev, staging, production):
+- Click **Environments** (left sidebar)
+- Click **+** to create new environment
+- Add variables: `base_url`, `api_key`, etc.
+
+### 2. **Save Responses**
+Right-click on any request → **Save Response** → **Save as example**
+This helps document expected responses.
+
+### 3. **Test Scripts**
+Add test scripts to validate responses:
+```javascript
+pm.test("Status code is 200", function () {
+    pm.response.to.have.status(200);
+});
+
+pm.test("Response has status field", function () {
+    var jsonData = pm.response.json();
+    pm.expect(jsonData).to.have.property('status');
+});
 ```
 
-Or with uvicorn:
+### 4. **Pre-request Scripts**
+Use pre-request scripts for dynamic data:
+```javascript
+// Generate random phone number
+pm.variables.set("phone", "+1" + Math.floor(Math.random() * 9000000000 + 1000000000));
 
-```bash
-uvicorn api:app --host localhost --port 8000 --reload
+// Set current timestamp
+pm.variables.set("timestamp", new Date().toISOString());
 ```
 
-## 📚 API Endpoints Overview
+## 📝 Modify Request Examples
 
-### 1. General Endpoints
-- **GET /** - API information and available endpoints
-- **GET /health** - Health check for all services
+### Update Phone Numbers:
+Search for `+1234567890` in the collection and replace with your test number.
 
-### 2. RAG Service (`/rag`)
-- **POST /rag/chat** - Chat with RAG system
-- **POST /rag/data_ingestion** - Ingest data from sources
-- **POST /rag/create_collection** - Create new collection
-- **POST /rag/delete_collection** - Delete collection
-- **GET /rag/conversation_history/{thread_id}** - Get conversation history
+### Update Email Addresses:
+Search for `example@example.com` and replace with your test email.
 
-### 3. Calls Service (`/calls`)
-- **POST /calls/outbound** - Initiate outbound call
+### Update Contact Details:
+Each request has placeholder data. Update it according to your needs.
 
-### 4. LLM Service (`/llm`)
-- **POST /llm/elaborate_prompt** - Elaborate and enhance prompts
+## 🔐 Authentication (If Needed)
 
-### 5. SMS Service (`/sms`)
-- **POST /sms/send** - Send SMS via Twilio
+If you add authentication to your API later, you can:
 
-### 6. Email Service (`/email`)
-- **POST /email/send** - Send plain text or HTML email
+1. **API Key Authentication:**
+   - Edit collection → **Authorization** tab
+   - Select type: **API Key**
+   - Add key name and value
 
-## 🔧 Configuration
+2. **Bearer Token:**
+   - Select type: **Bearer Token**
+   - Add token value
 
-### Environment Variables
+3. **OAuth 2.0:**
+   - Select type: **OAuth 2.0**
+   - Configure OAuth settings
 
-The collection uses the following environment variable:
-- `base_url` - Base URL for the API (default: `http://localhost:8000`)
+All requests in the collection will inherit this authentication.
 
-To change the base URL:
-1. Go to Environments
-2. Select **ISLAND AI - Local**
-3. Edit the `base_url` value
-4. Save changes
+## ⚙️ Outbound Call with Escalation Setup
 
-### Creating Additional Environments
+The new escalation endpoints require additional setup:
 
-You can create separate environments for different stages:
-
-#### Production Environment
-```json
-{
-    "base_url": "https://api.yourdomain.com",
-    "api_host": "api.yourdomain.com",
-    "api_port": "443"
-}
+### Required Environment Variables:
+```properties
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+LIVEKIT_URL=wss://your-server.livekit.cloud
+LIVEKIT_SIP_OUTBOUND_TRUNK=ST_vEtSehKXAp4d
+LIVEKIT_SUPERVISOR_PHONE_NUMBER=+919911062767
 ```
 
-#### Staging Environment
-```json
-{
-    "base_url": "https://staging-api.yourdomain.com",
-    "api_host": "staging-api.yourdomain.com",
-    "api_port": "443"
-}
-```
-
-## 📝 Usage Examples
-
-### Example 1: Send Email
-
-1. Navigate to **Email Service** → **Send Email**
-2. Make sure your `.env` file has:
+### Before Testing:
+1. **Start the agent worker:**
+   ```bash
+   python outbound.py
    ```
-   EMAIL_ADDRESS=your-email@gmail.com
-   EMAIL_PASSWORD=your-app-password
-   ```
-3. Update the request body:
-   ```json
-   {
-       "receiver_email": "recipient@example.com",
-       "subject": "Test Email",
-       "body": "Hello from Island AI!",
-       "is_html": false
-   }
-   ```
-4. Click **Send**
+   This must be running for escalation to work.
 
-### Example 2: Send SMS
+2. **Verify supervisor phone number:**
+   - Set `LIVEKIT_SUPERVISOR_PHONE_NUMBER` in `.env`
+   - Use E.164 format: `+[country code][number]`
 
-1. Navigate to **SMS Service** → **Send SMS**
-2. Make sure your `.env` file has:
-   ```
-   TWILIO_ACCOUNT_SID=your-account-sid
-   TWILIO_AUTH_TOKEN=your-auth-token
-   TWILIO_NUMBER=your-twilio-number
-   ```
-3. Update the request body:
-   ```json
-   {
-       "body": "Test SMS from Island AI",
-       "number": "+1234567890"
-   }
-   ```
-4. Click **Send**
+3. **Test the flow:**
+   - Agent calls customer
+   - Customer says "I want to speak to a supervisor"
+   - Agent puts customer on hold (with music 🎵)
+   - Agent calls supervisor and explains situation
+   - Supervisor says "ready" or "connect me"
+   - Calls are merged, agent disconnects
 
-### Example 3: Chat with RAG
-
-1. Navigate to **RAG Service** → **Chat with RAG**
-2. Update the request body with your query and collection:
-   ```json
-   {
-       "query": "What is machine learning?",
-       "collection_name": "ai_knowledge",
-       "top_k": 5,
-       "thread_id": "user-123"
-   }
-   ```
-3. Click **Send**
-
-## 🔑 Required Credentials
-
-Make sure your `.env` file contains all necessary credentials:
-
-```env
-# OpenAI
-OPENAI_API_KEY=your-openai-key
-
-# Qdrant
-QDRANT_URL=your-qdrant-url
-QDRANT_API_KEY=your-qdrant-key
-
-# MongoDB
-MONGODB_URI=your-mongodb-uri
-
-# Email (Gmail)
-EMAIL_ADDRESS=your-email@gmail.com
-EMAIL_PASSWORD=your-app-password
-
-# Twilio SMS
-TWILIO_ACCOUNT_SID=your-account-sid
-TWILIO_AUTH_TOKEN=your-auth-token
-TWILIO_NUMBER=your-twilio-number
-
-# API Configuration
-API_HOST=localhost
-API_PORT=8000
-```
-
-## 🧪 Testing Tips
-
-1. **Start with Health Check**: Always begin by testing the `/health` endpoint to ensure all services are operational
-
-2. **Check API Info**: Use the root `/` endpoint to see all available endpoints and their documentation
-
-3. **Use Postman Collections Runner**: 
-   - Select the collection
-   - Click **Run** to test multiple endpoints sequentially
-   - Great for integration testing
-
-4. **Save Responses**: Click **Save Response** to create example responses for documentation
-
-5. **Use Variables**: Store frequently used values as environment variables for easy reuse
+### Endpoints Available:
+- **Basic** - Simple test with minimal configuration
+- **Customer Support** - Pre-configured support scenario
+- **Sales Follow-up** - Pre-configured sales scenario
 
 ## 🐛 Troubleshooting
 
-### Connection Refused
-- Ensure your API server is running
-- Check that `base_url` matches your server configuration
+### Connection Refused Error:
+- Make sure the API server is running
+- Check if `base_url` matches your server address
+- Verify the port number (default: 8000)
 
-### 500 Internal Server Error
-- Check your `.env` file has all required credentials
-- Review server logs for detailed error messages
+### 400 Bad Request:
+- Check request body format
+- Ensure required fields are provided
+- Validate phone number format (must start with +)
+- Validate email format
 
-### 400 Bad Request
-- Verify request body format matches the schema
-- Check that all required fields are provided
+### 500 Internal Server Error:
+- Check API logs
+- Verify environment variables are set (.env file)
+- Ensure Twilio credentials are configured (for SMS)
+- Ensure SMTP credentials are configured (for email)
 
-### Email Not Sending
-- For Gmail, enable 2FA and generate an App Password
-- Don't use your regular Gmail password
+### Escalation Endpoint Errors:
 
-### SMS Not Sending
-- Verify phone number format (must start with `+` and country code)
-- Check Twilio account balance and number verification
+**"LiveKit credentials not configured":**
+- Ensure `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL`, and `LIVEKIT_SIP_OUTBOUND_TRUNK` are set
 
-## 📖 Additional Resources
+**"Escalation will fail if requested":**
+- Set `LIVEKIT_SUPERVISOR_PHONE_NUMBER` in `.env`
+- Warning only - call will work but escalation won't be available
 
-- **FastAPI Docs**: Visit `http://localhost:8000/docs` for interactive API documentation
-- **ReDoc**: Visit `http://localhost:8000/redoc` for alternative API documentation
-- **Postman Documentation**: [https://learning.postman.com/](https://learning.postman.com/)
+**"Agent not responding":**
+- Make sure `python outbound.py` is running before initiating calls
+- Check agent logs for errors
 
-## 💡 Pro Tips
+**"Call doesn't connect":**
+- Verify SIP trunk ID is correct
+- Check phone number format (E.164)
+- Ensure LiveKit URL is accessible
 
-1. **Use Pre-request Scripts**: Add authentication tokens or dynamic values before sending requests
+## 📊 Collection Runner
 
-2. **Create Tests**: Add test scripts to validate responses automatically
-   ```javascript
-   pm.test("Status code is 200", function () {
-       pm.response.to.have.status(200);
-   });
-   ```
+To test multiple requests:
 
-3. **Monitor APIs**: Use Postman Monitors to schedule collection runs and track API health
+1. Click **Runner** button (bottom right)
+2. Select "Island AI API Collection"
+3. Select which requests to run
+4. Set iterations and delay
+5. Click **Run Island AI API Collection**
 
-4. **Share with Team**: Export and share collections with your team for consistent testing
+This is useful for:
+- Testing all endpoints at once
+- Load testing
+- Regression testing
 
-5. **Version Control**: Keep your Postman collections in Git for version tracking
+## 🎯 Best Practices
+
+1. **Use Variables** - Don't hardcode values
+2. **Add Tests** - Validate responses automatically
+3. **Document** - Add descriptions to requests
+4. **Organize** - Keep requests in logical folders
+5. **Version Control** - Commit collection to git
+6. **Share** - Export and share with team members
+
+## 📤 Exporting
+
+To share the collection:
+
+1. Right-click on collection name
+2. Click **Export**
+3. Choose **Collection v2.1** (recommended)
+4. Save the JSON file
+5. Share with team or commit to repository
 
 ---
 
-**Happy Testing! 🚀**
-
-For issues or questions, refer to the API documentation at `/docs` when the server is running.
-
+Happy testing! 🎉

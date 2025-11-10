@@ -8,10 +8,14 @@ import json
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 from pathlib import Path
+from dotenv import load_dotenv
+from livekit import api, rtc
 from utils.logger import log_info, log_error, log_warning, log_exception
 from voice_backend.outboundService.services.call_service import make_outbound_call
 from voice_backend.outboundService.common.utils import validate_phone_number, format_phone_number
 from model import OutboundCallRequest, StatusResponse
+
+load_dotenv()
 
 router = APIRouter(prefix="/calls", tags=["Calls"])
 
@@ -249,5 +253,174 @@ async def outbound_call(request: OutboundCallRequest):
         raise
     except Exception as e:
         log_exception(f"Error initiating outbound call: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Outbound call error: {str(e)}")
+
+
+@router.post("/outbound-with-escalation", response_model=StatusResponse)
+async def outbound_call_with_escalation(request: OutboundCallRequest):
+    """
+    Initiate an outbound call with AI agent that can escalate to a human supervisor.
+    
+    This endpoint creates a LiveKit room and calls the customer. The outbound.py agent worker
+    (which must be running) will automatically join the room and handle the conversation.
+    
+    Prerequisites:
+    - outbound.py agent worker must be running (python outbound.py)
+    - Agent worker uses the "sip-inbound" agent name to dispatch
+    
+    Flow (as implemented in outbound.py):
+    1. Room is created
+    2. Customer joins room via SIP call
+    3. Agent worker (outbound.py) automatically dispatches to the room
+    4. SupportAgent starts conversation with customer
+    5. If customer requests escalation, agent calls supervisor
+    6. Agent provides conversation summary to supervisor
+    7. Supervisor confirms, calls are merged, agent disconnects
+    
+    Args:
+        request: OutboundCallRequest containing:
+            - phone_number: Customer phone number with country code (e.g., +1234567890)
+            - name: Customer's name for personalization (optional)
+            - dynamic_instruction: Custom instructions for the AI agent (optional)
+            - language: TTS language code (default: "en")
+            - emotion: TTS emotion (default: "Calm")
+        
+    Returns:
+        StatusResponse with call initiation status
+    
+    Environment variables required:
+        - LIVEKIT_API_KEY: Your LiveKit API key
+        - LIVEKIT_API_SECRET: Your LiveKit API secret
+        - LIVEKIT_URL: Your LiveKit server URL
+        - LIVEKIT_SIP_OUTBOUND_TRUNK: Your SIP trunk ID (e.g., ST_vEtSehKXAp4d)
+        - LIVEKIT_SUPERVISOR_PHONE_NUMBER: Supervisor's phone number (e.g., +919911062767)
+    """
+    try:
+        log_info(f"Outbound call with escalation request to: '{request.phone_number}'")
+        
+        # Format and validate phone number
+        formatted_number = format_phone_number(request.phone_number)
+        
+        if not validate_phone_number(formatted_number):
+            log_error(f"Invalid phone number format: '{request.phone_number}'")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid phone number format. Phone number must start with '+' followed by country code and number (e.g., +1234567890)"
+            )
+        
+        # Get LiveKit credentials from environment
+        livekit_url = os.getenv("LIVEKIT_URL")
+        livekit_api_key = os.getenv("LIVEKIT_API_KEY")
+        livekit_api_secret = os.getenv("LIVEKIT_API_SECRET")
+        sip_trunk_id = os.getenv("LIVEKIT_SIP_OUTBOUND_TRUNK")
+        supervisor_phone = os.getenv("LIVEKIT_SUPERVISOR_PHONE_NUMBER")
+        
+        # Validate required credentials
+        if not all([livekit_url, livekit_api_key, livekit_api_secret, sip_trunk_id]):
+            log_error("Missing LiveKit credentials in environment variables")
+            raise HTTPException(
+                status_code=500,
+                detail="LiveKit credentials not configured. Please set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and LIVEKIT_SIP_OUTBOUND_TRUNK"
+            )
+        
+        if not supervisor_phone:
+            log_warning("LIVEKIT_SUPERVISOR_PHONE_NUMBER not set - escalation will fail if requested")
+        
+        # Update .env file with dynamic parameters for the agent
+        # The outbound.py agent worker will read these values
+        log_info("Updating .env file with dynamic parameters for agent...")
+        update_env_file(
+            dynamic_instruction=request.dynamic_instruction,
+            caller_name=request.name,
+            language=request.language,
+            emotion=request.emotion
+        )
+        log_info("✓ .env file updated successfully")
+        
+        # Create unique room name for this call
+        # Pattern matches what outbound.py expects
+        import uuid
+        import time
+        room_name = f"outbound-escalation-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+        log_info(f"Creating room: {room_name}")
+        
+        # Initialize LiveKit API
+        lkapi = api.LiveKitAPI(
+            url=livekit_url,
+            api_key=livekit_api_key,
+            api_secret=livekit_api_secret
+        )
+        
+        try:
+            # Step 1: Create the room with metadata for agent dispatch
+            # Setting metadata to signal the agent worker to join
+            await lkapi.room.create_room(
+                api.CreateRoomRequest(
+                    name=room_name,
+                    metadata=json.dumps({"agent_name": "sip-inbound"})  # Signal which agent should join
+                )
+            )
+            log_info(f"✓ Room created: {room_name}")
+            
+            # Step 2: Agent will auto-dispatch to the room
+            # The outbound.py worker is configured to automatically join any room
+            log_info(f"Agent worker will auto-dispatch when participant joins...")
+            
+            # Step 3: Initiate SIP call to customer
+            # Customer joins the room as "customer-sip" participant
+            # This triggers the outbound.py entrypoint which:
+            # - Creates AgentSession with SupportAgent
+            # - Sets up SessionManager with escalation capabilities  
+            # - Starts the agent conversation
+            log_info(f"Initiating SIP call to customer: {formatted_number}")
+            log_info(f"  Customer will join room as participant")
+            log_info(f"  Agent will handle conversation with escalation support")
+            
+            participant = await lkapi.sip.create_sip_participant(
+                api.CreateSIPParticipantRequest(
+                    sip_trunk_id=sip_trunk_id,
+                    sip_call_to=formatted_number,
+                    room_name=room_name,
+                    participant_identity="customer-sip",
+                    participant_name=request.name or "Customer",
+                    krisp_enabled=True,  # Enable noise cancellation as in outbound.py
+                    wait_until_answered=True
+                )
+            )
+            
+            log_info(f"✓ Call initiated successfully")
+            log_info(f"  - Room: {room_name}")
+            log_info(f"  - Customer Participant ID: {participant.participant_id}")
+            log_info(f"  - SIP Call ID: {participant.sip_call_id}")
+            log_info(f"  - Agent dispatched and ready to handle conversation")
+            log_info(f"  - Escalation available to: {supervisor_phone or 'Not configured'}")
+            
+            return StatusResponse(
+                status="success",
+                message=f"Outbound call with escalation initiated to {formatted_number}" + (f" for {request.name}" if request.name else ""),
+                details={
+                    "phone_number": formatted_number,
+                    "original_input": request.phone_number,
+                    "name": request.name,
+                    "room_name": room_name,
+                    "dispatch_method": "Auto-dispatch (agent joins automatically)",
+                    "participant_id": participant.participant_id,
+                    "sip_call_id": participant.sip_call_id,
+                    "has_dynamic_instruction": bool(request.dynamic_instruction),
+                    "language": request.language,
+                    "emotion": request.emotion,
+                    "escalation_enabled": bool(supervisor_phone),
+                    "supervisor_phone": supervisor_phone if supervisor_phone else "Not configured",
+                    "flow": "Room created → Customer joins → Agent auto-dispatches → Conversation starts → Escalation available"
+                }
+            )
+            
+        finally:
+            await lkapi.aclose()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_exception(f"Error initiating outbound call with escalation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Outbound call error: {str(e)}")
 

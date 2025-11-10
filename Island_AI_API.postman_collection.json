@@ -1,14 +1,20 @@
 {
 	"info": {
-		"_postman_id": "island-ai-collection-2024",
-		"name": "ISLAND AI API",
-		"description": "Complete API collection for Island AI - RAG Service, Calls, LLM, SMS, and Email endpoints",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "island-ai"
+		"_postman_id": "island-ai-api-collection",
+		"name": "Island AI API Collection",
+		"description": "Complete API collection for Island AI - includes RAG, Calls, LLM, SMS, Email, and Bulk Communication endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	],
 	"item": [
 		{
-			"name": "General",
+			"name": "Health & Info",
 			"item": [
 				{
 					"name": "Root - API Info",
@@ -17,16 +23,11 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								""
-							]
+							"host": ["{{base_url}}"],
+							"path": [""]
 						},
 						"description": "Get API information and available endpoints"
-					},
-					"response": []
+					}
 				},
 				{
 					"name": "Health Check",
@@ -35,19 +36,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/health",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"health"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["health"]
 						},
-						"description": "Check the health status of all services"
-					},
-					"response": []
+						"description": "Check API health status"
+					}
 				}
-			],
-			"description": "General API endpoints for information and health checks"
+			]
 		},
 		{
 			"name": "RAG Service",
@@ -64,49 +59,15 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"query\": \"What is artificial intelligence?\",\n    \"collection_name\": \"my_collection\",\n    \"top_k\": 5,\n    \"thread_id\": \"user-123\",\n    \"system_prompt\": \"You are a helpful AI assistant.\"\n}"
+							"raw": "{\n  \"query\": \"What is your product pricing?\",\n  \"collection_name\": \"my_knowledge_base\",\n  \"top_k\": 5,\n  \"thread_id\": \"user123-session1\",\n  \"system_prompt\": \"You are a helpful assistant.\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/rag/chat",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"rag",
-								"chat"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["rag", "chat"]
 						},
 						"description": "Chat with the RAG system using a specific collection"
-					},
-					"response": []
-				},
-				{
-					"name": "Data Ingestion",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"collection_name\": \"my_collection\",\n    \"url_link\": \"https://example.com/document.pdf\",\n    \"source_type\": \"url\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/rag/data_ingestion",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"rag",
-								"data_ingestion"
-							]
-						},
-						"description": "Ingest data from URL, PDF, or Excel sources"
-					},
-					"response": []
+					}
 				},
 				{
 					"name": "Create Collection",
@@ -120,21 +81,15 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"collection_name\": \"my_new_collection\"\n}"
+							"raw": "{\n  \"collection_name\": \"my_knowledge_base\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/rag/create_collection",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"rag",
-								"create_collection"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["rag", "create_collection"]
 						},
-						"description": "Create a new collection in the RAG system"
-					},
-					"response": []
+						"description": "Create a new RAG collection"
+					}
 				},
 				{
 					"name": "Delete Collection",
@@ -148,50 +103,18 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"collection_name\": \"old_collection\"\n}"
+							"raw": "{\n  \"collection_name\": \"my_knowledge_base\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/rag/delete_collection",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"rag",
-								"delete_collection"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["rag", "delete_collection"]
 						},
-						"description": "Delete an existing collection"
-					},
-					"response": []
+						"description": "Delete a RAG collection"
+					}
 				},
 				{
-					"name": "Get Conversation History",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/rag/conversation_history/user-123",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"rag",
-								"conversation_history",
-								"user-123"
-							]
-						},
-						"description": "Retrieve conversation history for a specific thread ID"
-					},
-					"response": []
-				}
-			],
-			"description": "RAG (Retrieval-Augmented Generation) service endpoints"
-		},
-		{
-			"name": "Calls Service",
-			"item": [
-				{
-					"name": "Outbound Call",
+					"name": "Data Ingestion - URL",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -202,24 +125,211 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"phone_number\": \"+1234567890\",\n    \"name\": \"John Doe\",\n    \"dynamic_instruction\": \"Remind the user about their appointment tomorrow at 3 PM\",\n    \"language\": \"en\",\n    \"emotion\": \"Calm\"\n}"
+							"raw": "{\n  \"collection_name\": \"my_knowledge_base\",\n  \"url_link\": \"https://example.com/documentation\",\n  \"source_type\": \"url\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/data_ingestion",
+							"host": ["{{base_url}}"],
+							"path": ["rag", "data_ingestion"]
+						},
+						"description": "Ingest data from a URL into a collection"
+					}
+				},
+				{
+					"name": "Data Ingestion - PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"collection_name\": \"my_knowledge_base\",\n  \"url_link\": \"https://example.com/document.pdf\",\n  \"source_type\": \"pdf\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/data_ingestion",
+							"host": ["{{base_url}}"],
+							"path": ["rag", "data_ingestion"]
+						},
+						"description": "Ingest data from a PDF into a collection"
+					}
+				},
+				{
+					"name": "Data Ingestion - Excel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"collection_name\": \"my_knowledge_base\",\n  \"url_link\": \"https://example.com/data.xlsx\",\n  \"source_type\": \"excel\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/data_ingestion",
+							"host": ["{{base_url}}"],
+							"path": ["rag", "data_ingestion"]
+						},
+						"description": "Ingest data from an Excel file into a collection"
+					}
+				},
+				{
+					"name": "Get Conversation History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/rag/conversation_history/user123-session1",
+							"host": ["{{base_url}}"],
+							"path": ["rag", "conversation_history", "user123-session1"]
+						},
+						"description": "Get conversation history for a specific thread"
+					}
+				}
+			]
+		},
+		{
+			"name": "Calls",
+			"item": [
+				{
+					"name": "Outbound Call - Basic",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+1234567890\",\n  \"name\": \"John Doe\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/calls/outbound",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"calls",
-								"outbound"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound"]
 						},
-						"description": "Initiate an outbound call with custom instructions and TTS settings"
-					},
-					"response": []
+						"description": "Make a basic outbound call"
+					}
+				},
+				{
+					"name": "Outbound Call - With Instructions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+1234567890\",\n  \"name\": \"Jane Smith\",\n  \"dynamic_instruction\": \"You are a friendly sales representative calling to follow up on a product inquiry. Be professional and helpful.\",\n  \"language\": \"en\",\n  \"emotion\": \"Calm\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound"]
+						},
+						"description": "Make an outbound call with custom AI instructions"
+					}
+				},
+				{
+					"name": "Outbound Call - Spanish",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+1234567890\",\n  \"name\": \"Carlos Rodriguez\",\n  \"dynamic_instruction\": \"Eres un asistente virtual amable llamando para confirmar una cita.\",\n  \"language\": \"es\",\n  \"emotion\": \"Friendly\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound"]
+						},
+						"description": "Make an outbound call in Spanish"
+					}
+				},
+				{
+					"name": "Outbound Call with Escalation - Basic",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+919911062767\",\n  \"name\": \"Customer Test\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound-with-escalation",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound-with-escalation"]
+						},
+						"description": "Make an outbound call with AI agent that can escalate to human supervisor. The agent will call the customer, and if the customer requests to speak to a human, the agent will call the supervisor (configured in LIVEKIT_SUPERVISOR_PHONE_NUMBER) and merge the calls."
+					}
+				},
+				{
+					"name": "Outbound Call with Escalation - Customer Support",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+919911062767\",\n  \"name\": \"Rajesh Kumar\",\n  \"dynamic_instruction\": \"You are a LiveKit customer support agent calling to follow up on a support ticket about login issues. Be empathetic and helpful. If you cannot resolve the issue, offer to connect them with a supervisor.\",\n  \"language\": \"en\",\n  \"emotion\": \"Calm\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound-with-escalation",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound-with-escalation"]
+						},
+						"description": "Make a customer support call with custom instructions. The AI agent can escalate to a human supervisor if the customer requests it or if the issue cannot be resolved."
+					}
+				},
+				{
+					"name": "Outbound Call with Escalation - Sales Follow-up",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone_number\": \"+12625925656\",\n  \"name\": \"John Smith\",\n  \"dynamic_instruction\": \"You are calling to follow up on a product demo inquiry. Answer questions about features and pricing. If the prospect has complex technical questions or wants to discuss custom solutions, offer to connect them with a senior sales engineer.\",\n  \"language\": \"en\",\n  \"emotion\": \"Friendly\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound-with-escalation",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "outbound-with-escalation"]
+						},
+						"description": "Make a sales follow-up call with the ability to escalate to a senior sales engineer. Perfect for qualifying leads and handling complex inquiries."
+					}
 				}
-			],
-			"description": "Outbound call service endpoints"
+			]
 		},
 		{
 			"name": "LLM Service",
@@ -236,27 +346,20 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"prompt\": \"Write a story about AI\"\n}"
+							"raw": "{\n  \"prompt\": \"Write a blog post about AI\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/llm/elaborate_prompt",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"llm",
-								"elaborate_prompt"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["llm", "elaborate_prompt"]
 						},
-						"description": "Elaborate and enhance a given prompt using LLM"
-					},
-					"response": []
+						"description": "Elaborate and improve a simple prompt"
+					}
 				}
-			],
-			"description": "Large Language Model service endpoints"
+			]
 		},
 		{
-			"name": "SMS Service",
+			"name": "SMS",
 			"item": [
 				{
 					"name": "Send SMS",
@@ -270,58 +373,18 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"body\": \"Hello! This is a test SMS message from Island AI.\",\n    \"number\": \"+1234567890\"\n}"
+							"raw": "{\n  \"body\": \"Hello! This is a test message from Island AI.\",\n  \"number\": \"+1234567890\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/sms/send",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"sms",
-								"send"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["sms", "send"]
 						},
-						"description": "Send an SMS message via Twilio (requires valid Twilio credentials)"
-					},
-					"response": []
-				}
-			],
-			"description": "SMS service endpoints using Twilio"
-		},
-		{
-			"name": "Email Service",
-			"item": [
-				{
-					"name": "Send Email",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"receiver_email\": \"recipient@example.com\",\n    \"subject\": \"Test Email from Island AI\",\n    \"body\": \"Hello! This is a test email sent via the Island AI API.\",\n    \"is_html\": false\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/email/send",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"email",
-								"send"
-							]
-						},
-						"description": "Send an email via SMTP (supports both plain text and HTML)"
-					},
-					"response": []
+						"description": "Send an SMS message via Twilio"
+					}
 				},
 				{
-					"name": "Send HTML Email",
+					"name": "Send SMS - Appointment Reminder",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -332,31 +395,203 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"receiver_email\": \"recipient@example.com\",\n    \"subject\": \"Welcome to Island AI!\",\n    \"body\": \"<html><body><h1>Welcome!</h1><p>Thank you for using <strong>Island AI</strong>.</p><p>We're excited to have you on board! 🚀</p></body></html>\",\n    \"is_html\": true\n}"
+							"raw": "{\n  \"body\": \"Reminder: Your appointment is scheduled for tomorrow at 10:00 AM. Reply CONFIRM to confirm or RESCHEDULE to change.\",\n  \"number\": \"+1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sms/send",
+							"host": ["{{base_url}}"],
+							"path": ["sms", "send"]
+						},
+						"description": "Send appointment reminder SMS"
+					}
+				}
+			]
+		},
+		{
+			"name": "Email",
+			"item": [
+				{
+					"name": "Send Email - Plain Text",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"receiver_email\": \"example@example.com\",\n  \"subject\": \"Welcome to Island AI\",\n  \"body\": \"Hello,\\n\\nThank you for joining Island AI. We're excited to have you on board!\\n\\nBest regards,\\nIsland AI Team\",\n  \"is_html\": false\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/email/send",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"email",
-								"send"
-							]
+							"host": ["{{base_url}}"],
+							"path": ["email", "send"]
 						},
-						"description": "Send an HTML email via SMTP"
-					},
-					"response": []
+						"description": "Send a plain text email"
+					}
+				},
+				{
+					"name": "Send Email - HTML",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"receiver_email\": \"example@example.com\",\n  \"subject\": \"Your Monthly Newsletter\",\n  \"body\": \"<html><body><h1>Welcome to Our Newsletter!</h1><p>Here are the latest updates from Island AI.</p><ul><li>New Feature: Bulk Communication</li><li>Improved RAG Performance</li><li>Enhanced Voice Quality</li></ul><p>Best regards,<br/>Island AI Team</p></body></html>\",\n  \"is_html\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/email/send",
+							"host": ["{{base_url}}"],
+							"path": ["email", "send"]
+						},
+						"description": "Send an HTML formatted email"
+					}
 				}
-			],
-			"description": "Email service endpoints using SMTP"
-		}
-	],
-	"variable": [
+			]
+		},
 		{
-			"key": "base_url",
-			"value": "http://localhost:8000",
-			"type": "string"
+			"name": "Bulk Communication",
+			"item": [
+				{
+					"name": "Single Contact - All Channels",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"Amar\",\n      \"email\": \"amarc8399@gmail.com\",\n      \"phone\": \"+919911062767\"\n    }\n  ],\n  \"communication_types\": [\"call\", \"sms\", \"email\"],\n  \"sms_body\": {\n    \"message\": \"Hi Amar, thanks for connecting with us! We just called you.\"\n  },\n  \"email_body\": {\n    \"subject\": \"Follow-up from our call\",\n    \"body\": \"Hi Amar,\\n\\nThank you for taking our call. We appreciate your time.\\n\\nBest regards,\\nYour Team\",\n    \"is_html\": false\n  },\n  \"dynamic_instruction\": \"You are a friendly sales representative calling to follow up on a product inquiry.\",\n  \"language\": \"en\",\n  \"emotion\": \"Calm\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Send call, SMS, and email to a single contact"
+					}
+				},
+				{
+					"name": "Single Contact - Call Only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"John Doe\",\n      \"phone\": \"+1234567890\"\n    }\n  ],\n  \"communication_types\": [\"call\"],\n  \"dynamic_instruction\": \"You are calling to schedule an appointment. Be professional and friendly.\",\n  \"language\": \"en\",\n  \"emotion\": \"Professional\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Make a call to a single contact without SMS or email"
+					}
+				},
+				{
+					"name": "Single Contact - SMS and Email Only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"Jane Smith\",\n      \"email\": \"jane@example.com\",\n      \"phone\": \"+1234567890\"\n    }\n  ],\n  \"communication_types\": [\"sms\", \"email\"],\n  \"sms_body\": {\n    \"message\": \"Your appointment is confirmed for tomorrow at 10 AM. See you then!\"\n  },\n  \"email_body\": {\n    \"subject\": \"Appointment Confirmation\",\n    \"body\": \"<h1>Appointment Confirmed</h1><p>Your appointment is scheduled for tomorrow at 10:00 AM.</p><p>Location: 123 Main St, Suite 100</p><p>Please arrive 10 minutes early.</p>\",\n    \"is_html\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Send SMS and email without making a call"
+					}
+				},
+				{
+					"name": "Multiple Contacts - All Channels",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"Alice Johnson\",\n      \"email\": \"alice@example.com\",\n      \"phone\": \"+1234567890\"\n    },\n    {\n      \"name\": \"Bob Williams\",\n      \"email\": \"bob@example.com\",\n      \"phone\": \"+0987654321\"\n    },\n    {\n      \"name\": \"Charlie Brown\",\n      \"email\": \"charlie@example.com\",\n      \"phone\": \"+1122334455\"\n    }\n  ],\n  \"communication_types\": [\"call\", \"sms\", \"email\"],\n  \"sms_body\": {\n    \"message\": \"Important update: Our office hours have changed. Check your email for details.\"\n  },\n  \"email_body\": {\n    \"subject\": \"Office Hours Update\",\n    \"body\": \"<html><body><h2>Important Notice</h2><p>Our office hours have been updated:</p><ul><li>Monday-Friday: 9 AM - 6 PM</li><li>Saturday: 10 AM - 2 PM</li><li>Sunday: Closed</li></ul><p>Thank you for your understanding.</p></body></html>\",\n    \"is_html\": true\n  },\n  \"dynamic_instruction\": \"You are calling to inform about important office hours changes. Be clear and concise.\",\n  \"language\": \"en\",\n  \"emotion\": \"Professional\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Send call, SMS, and email to multiple contacts"
+					}
+				},
+				{
+					"name": "Multiple Contacts - Email Only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"Customer 1\",\n      \"email\": \"customer1@example.com\"\n    },\n    {\n      \"name\": \"Customer 2\",\n      \"email\": \"customer2@example.com\"\n    },\n    {\n      \"name\": \"Customer 3\",\n      \"email\": \"customer3@example.com\"\n    },\n    {\n      \"name\": \"Customer 4\",\n      \"email\": \"customer4@example.com\"\n    },\n    {\n      \"name\": \"Customer 5\",\n      \"email\": \"customer5@example.com\"\n    }\n  ],\n  \"communication_types\": [\"email\"],\n  \"email_body\": {\n    \"subject\": \"Newsletter - November 2025\",\n    \"body\": \"<html><body><h1>Monthly Newsletter</h1><p>Welcome to our November 2025 newsletter!</p><h2>What's New</h2><ul><li>New AI Voice Features</li><li>Enhanced RAG Capabilities</li><li>Bulk Communication Tools</li></ul><p>Stay tuned for more updates!</p><hr/><p><small>To unsubscribe, reply with UNSUBSCRIBE</small></p></body></html>\",\n    \"is_html\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Send newsletter email to multiple contacts"
+					}
+				},
+				{
+					"name": "Multiple Contacts - SMS Campaign",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"contacts\": [\n    {\n      \"name\": \"Lead 1\",\n      \"phone\": \"+1234567890\"\n    },\n    {\n      \"name\": \"Lead 2\",\n      \"phone\": \"+0987654321\"\n    },\n    {\n      \"name\": \"Lead 3\",\n      \"phone\": \"+1122334455\"\n    }\n  ],\n  \"communication_types\": [\"sms\"],\n  \"sms_body\": {\n    \"message\": \"🎉 Special Offer! Get 50% off your first purchase. Use code: WELCOME50. Valid until end of month. Shop now: https://example.com/shop\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bulk-communication/send",
+							"host": ["{{base_url}}"],
+							"path": ["bulk-communication", "send"]
+						},
+						"description": "Send SMS campaign to multiple contacts"
+					}
+				}
+			]
 		}
 	]
 }

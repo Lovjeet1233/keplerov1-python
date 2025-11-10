@@ -210,7 +210,7 @@ async def entrypoint(ctx: agents.JobContext):
         # Keep the session alive
         logger.info("Session running, keeping alive...")
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0)
             
     except Exception as e:
         logger.error(f"✗ Error in agent session: {e}", exc_info=True)
