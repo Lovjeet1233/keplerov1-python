@@ -1,0 +1,11 @@
+{
+    "trunk": {
+      "name": "iitroorkee3",
+      "numbers": [
+        "+14789002879"
+      ],
+      "allowed_numbers":["+919911062767"],
+      "krispEnabled": true
+    }
+  }
+  

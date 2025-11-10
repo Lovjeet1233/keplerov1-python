@@ -1,0 +1,10 @@
+
+{
+  "trunk": {
+    "name": "iitroorkee3",
+    "address": "testingc8399.pstn.twilio.com",
+    "numbers": ["+12625925656"],
+    "auth_username": "Testingc8399",
+    "auth_password": "9891596006Rama"
+  }
+}

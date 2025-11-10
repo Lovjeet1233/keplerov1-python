@@ -1,0 +1,362 @@
+{
+	"info": {
+		"_postman_id": "island-ai-collection-2024",
+		"name": "ISLAND AI API",
+		"description": "Complete API collection for Island AI - RAG Service, Calls, LLM, SMS, and Email endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "island-ai"
+	},
+	"item": [
+		{
+			"name": "General",
+			"item": [
+				{
+					"name": "Root - API Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Get API information and available endpoints"
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Check the health status of all services"
+					},
+					"response": []
+				}
+			],
+			"description": "General API endpoints for information and health checks"
+		},
+		{
+			"name": "RAG Service",
+			"item": [
+				{
+					"name": "Chat with RAG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"query\": \"What is artificial intelligence?\",\n    \"collection_name\": \"my_collection\",\n    \"top_k\": 5,\n    \"thread_id\": \"user-123\",\n    \"system_prompt\": \"You are a helpful AI assistant.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/chat",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rag",
+								"chat"
+							]
+						},
+						"description": "Chat with the RAG system using a specific collection"
+					},
+					"response": []
+				},
+				{
+					"name": "Data Ingestion",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"collection_name\": \"my_collection\",\n    \"url_link\": \"https://example.com/document.pdf\",\n    \"source_type\": \"url\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/data_ingestion",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rag",
+								"data_ingestion"
+							]
+						},
+						"description": "Ingest data from URL, PDF, or Excel sources"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Collection",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"collection_name\": \"my_new_collection\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/create_collection",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rag",
+								"create_collection"
+							]
+						},
+						"description": "Create a new collection in the RAG system"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Collection",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"collection_name\": \"old_collection\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/rag/delete_collection",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rag",
+								"delete_collection"
+							]
+						},
+						"description": "Delete an existing collection"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Conversation History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/rag/conversation_history/user-123",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rag",
+								"conversation_history",
+								"user-123"
+							]
+						},
+						"description": "Retrieve conversation history for a specific thread ID"
+					},
+					"response": []
+				}
+			],
+			"description": "RAG (Retrieval-Augmented Generation) service endpoints"
+		},
+		{
+			"name": "Calls Service",
+			"item": [
+				{
+					"name": "Outbound Call",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone_number\": \"+1234567890\",\n    \"name\": \"John Doe\",\n    \"dynamic_instruction\": \"Remind the user about their appointment tomorrow at 3 PM\",\n    \"language\": \"en\",\n    \"emotion\": \"Calm\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/outbound",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"calls",
+								"outbound"
+							]
+						},
+						"description": "Initiate an outbound call with custom instructions and TTS settings"
+					},
+					"response": []
+				}
+			],
+			"description": "Outbound call service endpoints"
+		},
+		{
+			"name": "LLM Service",
+			"item": [
+				{
+					"name": "Elaborate Prompt",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"prompt\": \"Write a story about AI\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/llm/elaborate_prompt",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"llm",
+								"elaborate_prompt"
+							]
+						},
+						"description": "Elaborate and enhance a given prompt using LLM"
+					},
+					"response": []
+				}
+			],
+			"description": "Large Language Model service endpoints"
+		},
+		{
+			"name": "SMS Service",
+			"item": [
+				{
+					"name": "Send SMS",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"body\": \"Hello! This is a test SMS message from Island AI.\",\n    \"number\": \"+1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sms/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sms",
+								"send"
+							]
+						},
+						"description": "Send an SMS message via Twilio (requires valid Twilio credentials)"
+					},
+					"response": []
+				}
+			],
+			"description": "SMS service endpoints using Twilio"
+		},
+		{
+			"name": "Email Service",
+			"item": [
+				{
+					"name": "Send Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"receiver_email\": \"recipient@example.com\",\n    \"subject\": \"Test Email from Island AI\",\n    \"body\": \"Hello! This is a test email sent via the Island AI API.\",\n    \"is_html\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"email",
+								"send"
+							]
+						},
+						"description": "Send an email via SMTP (supports both plain text and HTML)"
+					},
+					"response": []
+				},
+				{
+					"name": "Send HTML Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"receiver_email\": \"recipient@example.com\",\n    \"subject\": \"Welcome to Island AI!\",\n    \"body\": \"<html><body><h1>Welcome!</h1><p>Thank you for using <strong>Island AI</strong>.</p><p>We're excited to have you on board! 🚀</p></body></html>\",\n    \"is_html\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/email/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"email",
+								"send"
+							]
+						},
+						"description": "Send an HTML email via SMTP"
+					},
+					"response": []
+				}
+			],
+			"description": "Email service endpoints using SMTP"
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	]
+}

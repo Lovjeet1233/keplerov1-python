@@ -1,0 +1,24 @@
+# LiveKit Configuration
+LIVEKIT_URL=your_livekit_url_here
+LIVEKIT_API_KEY=your_livekit_api_key_here
+LIVEKIT_API_SECRET=your_livekit_api_secret_here
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Qdrant Configuration
+QDRANT_URL=your_qdrant_url_here
+QDRANT_API_KEY=your_qdrant_api_key_here
+
+# MongoDB Configuration
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net
+
+# Deepgram Configuration (for STT)
+DEEPGRAM_API_KEY=your_deepgram_api_key_here
+
+# Agent Dynamic Configuration (Updated automatically by API)
+AGENT_INSTRUCTIONS="You are a helpful voice AI assistant."
+CALLER_NAME=""
+TTS_LANGUAGE="en"
+TTS_EMOTION="Calm"
+
