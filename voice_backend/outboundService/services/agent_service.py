@@ -149,27 +149,22 @@ async def entrypoint(ctx: agents.JobContext):
 
     logger.info("Adding shutdown callback...")
     ctx.add_shutdown_callback(cleanup_and_save)
-    logger.info("✓ Shutdown callback added")
+    logger.info("[OK] Shutdown callback added")
     
-    # Connect to the room
-    logger.info("Connecting to room...")
-    await ctx.connect()
-    logger.info("✓ Connected to room successfully")
-
-    # Initialize session components with error handling
+    # Initialize session components with error handling BEFORE connecting
     try:
         logger.info("Initializing session components...")
         
         logger.info("Step 1: Initializing STT (Deepgram)...")
         stt_instance = deepgram.STT(model=STT_MODEL, language=STT_LANGUAGE)
-        logger.info("✓ STT initialized successfully")
+        logger.info("[OK] STT initialized successfully")
         
         logger.info("Step 2: Initializing LLM (OpenAI)...")
         from livekit.plugins import openai as openai_plugin
         
         # Create AssistantLLM with function calling support
         llm_instance = openai_plugin.LLM(model=LLM_MODEL)
-        logger.info("✓ LLM initialized successfully")
+        logger.info("[OK] LLM initialized successfully")
         
         logger.info("Step 3: Initializing TTS (Google)...")
         # tts_instance = google.TTS()
@@ -179,7 +174,7 @@ async def entrypoint(ctx: agents.JobContext):
             language=language,
         
         )
-        logger.info("✓ TTS initialized successfully")
+        logger.info("[OK] TTS initialized successfully")
         
         logger.info("Step 4: Creating AgentSession...")
         session = AgentSession(
@@ -187,10 +182,10 @@ async def entrypoint(ctx: agents.JobContext):
             llm=llm_instance,
             tts=tts_instance,
         )
-        logger.info("✓ Session components initialized successfully")
+        logger.info("[OK] Session components initialized successfully")
         
     except Exception as e:
-        logger.error(f"✗ Error initializing session: {e}", exc_info=True)
+        logger.error(f"[ERROR] Error initializing session: {e}", exc_info=True)
         raise
 
     # Track SIP participant
@@ -200,11 +195,16 @@ async def entrypoint(ctx: agents.JobContext):
     # Handle participant connection
     async def handle_participant_connected(participant):
         nonlocal greeting_sent
-        logger.info(f"Participant connected: {participant.identity}")
+        logger.info(f"Participant connected - Identity: '{participant.identity}', Kind: {participant.kind}")
+        
+        # Check if this is a SIP participant (could be "sip-caller" or start with "sip:")
+        is_sip = participant.identity == sip_participant_identity or participant.identity.startswith("sip:")
+        logger.info(f"Is SIP participant: {is_sip}")
         
         # Send greeting only once and only for actual participants (not the agent)
-        if not greeting_sent and participant.identity != "agent":
+        if not greeting_sent and participant.identity not in ["agent", "agent-worker"]:
             greeting_sent = True
+            logger.info("Waiting for connection to stabilize before greeting...")
             await asyncio.sleep(2)  # Wait for connection to stabilize
             
             try:
@@ -216,26 +216,56 @@ async def entrypoint(ctx: agents.JobContext):
                 greeting_instruction += ", and ask how you can help them today."
                 
                 await session.generate_reply(instructions=greeting_instruction)
-                logger.info("Initial greeting sent successfully")
+                logger.info("[OK] Initial greeting sent successfully")
             except Exception as e:
-                logger.error(f"Error sending greeting: {e}")
+                logger.error(f"[ERROR] Error sending greeting: {e}", exc_info=True)
 
     # Handle participant disconnection
     async def handle_disconnect(participant):
+        nonlocal greeting_sent
         logger.info(f"Participant disconnected: {participant.identity}")
-        if participant.identity == sip_participant_identity:
-            logger.info(f"SIP caller '{participant.identity}' disconnected — session will end")
-            # Let the session handle cleanup naturally
+        if participant.identity == sip_participant_identity or participant.identity.startswith("sip:"):
+            logger.info(f"SIP caller '{participant.identity}' disconnected — ending session")
+            try:
+                # End the room to properly cleanup
+                await ctx.api.room.delete_room(
+                    api.DeleteRoomRequest(room=ctx.room.name)
+                )
+                logger.info(f"Room {ctx.room.name} deleted successfully")
+                logger.info("Shutting down agent to allow new calls...")
+                # Exit the session gracefully - this allows the worker to handle new rooms
+                await ctx.shutdown()
+            except Exception as e:
+                logger.error(f"Error deleting room: {e}", exc_info=True)
+        else:
+            # Reset greeting flag if a non-SIP participant leaves (to support reconnection)
+            logger.info("Resetting greeting flag for potential reconnection")
+            greeting_sent = False
 
-    # Register event handlers
+    # Register event handlers BEFORE starting session
     def on_participant_connected(participant):
         asyncio.create_task(handle_participant_connected(participant))
     
     def on_disconnect(participant):
         asyncio.create_task(handle_disconnect(participant))
 
+    logger.info("Registering event handlers...")
     ctx.room.on("participant_connected", on_participant_connected)
     ctx.room.on("participant_disconnected", on_disconnect)
+    logger.info("[OK] Event handlers registered")
+
+    # Connect to the room NOW (after everything is ready)
+    logger.info("Connecting to room...")
+    await ctx.connect()
+    logger.info("[OK] Connected to room successfully - agent is ready for participants")
+    
+    # Log existing participants in the room
+    logger.info(f"Checking for existing participants in room...")
+    logger.info(f"Remote participants: {len(ctx.room.remote_participants)}")
+    for identity, participant in ctx.room.remote_participants.items():
+        logger.info(f"  - Existing participant: '{identity}' (Kind: {participant.kind})")
+        # Trigger greeting for existing participants
+        await handle_participant_connected(participant)
 
     # Start the agent session
     try:
@@ -244,15 +274,15 @@ async def entrypoint(ctx: agents.JobContext):
         
         # Use dynamic instruction from environment variable
         assistant = Assistant(instructions=dynamic_instruction)
-        logger.info("✓ Assistant instance created")
+        logger.info("[OK] Assistant instance created")
         logger.info(f"Using instructions: {dynamic_instruction[:100]}...")
-        logger.info("✓ Transfer tool registered via @function_tool decorator")
+        logger.info("[OK] Transfer tool registered via @function_tool decorator")
         
         logger.info("Creating RoomInputOptions with BVC noise cancellation...")
         room_options = RoomInputOptions(
             noise_cancellation=noise_cancellation.BVC(),
         )
-        logger.info("✓ RoomInputOptions created")
+        logger.info("[OK] RoomInputOptions created")
         
         logger.info("Calling session.start()...")
         await session.start(
@@ -260,16 +290,20 @@ async def entrypoint(ctx: agents.JobContext):
             agent=assistant,
             room_input_options=room_options,
         )
-        logger.info("✓ Agent session started successfully")
+        logger.info("[OK] Agent session started successfully")
         
-        # Keep the session alive
-        logger.info("Session running, keeping alive...")
-        while True:
-            await asyncio.sleep(0)
+        # Keep the session alive - wait for shutdown
+        logger.info("Session running, waiting for shutdown...")
+        await ctx.wait_for_shutdown()
+        logger.info("Agent shutdown completed - ready for next call")
             
     except Exception as e:
-        logger.error(f"✗ Error in agent session: {e}", exc_info=True)
+        logger.error(f"[ERROR] Error in agent session: {e}", exc_info=True)
         raise
+    finally:
+        logger.info("=" * 60)
+        logger.info(f"ENTRYPOINT FINISHED - Room: {ctx.room.name}")
+        logger.info("=" * 60)
 
 def run_agent():
     """Run the agent with CLI interface"""
@@ -279,5 +313,5 @@ def run_agent():
     try:
         agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
     except Exception as e:
-        logger.error(f"✗ Fatal error in run_agent: {e}", exc_info=True)
+        logger.error(f"[ERROR] Fatal error in run_agent: {e}", exc_info=True)
         raise 
