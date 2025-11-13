@@ -1,398 +1,840 @@
-# RAG Service API
+# Island AI - Enterprise AI Communication Platform
 
-A Retrieval-Augmented Generation (RAG) service built with FastAPI, Qdrant, and OpenAI for chatbot functionality with multiple data ingestion sources.
+A comprehensive AI-powered communication platform that combines RAG (Retrieval-Augmented Generation), real-time voice AI agents, and multi-channel communication orchestration. Built with FastAPI, LiveKit, OpenAI, and multiple enterprise integrations.
 
-## Features
+## 🚀 Key Features
 
-- **Multiple Data Sources**: Ingest data from PDFs, websites, and Excel files
+### 🤖 AI & RAG
+- **Retrieval-Augmented Generation (RAG)**: Intelligent chatbot with context from your knowledge base
+- **Multiple Data Sources**: Ingest from PDFs, websites, Excel files simultaneously
 - **Vector Search**: Powered by Qdrant with OpenAI embeddings
-- **LangGraph Workflow**: Two-node architecture (retrieve → generate) with memory checkpointer
-- **Conversation Memory**: Support for multi-turn conversations via thread_id
-- **REST API**: Easy-to-use FastAPI endpoints
-- **Collection Management**: Create and delete Qdrant collections
-- **Centralized Logging**: Comprehensive logging for debugging and monitoring
+- **Conversation Memory**: Multi-turn conversations with MongoDB checkpointing
+- **LangGraph Workflow**: State-machine architecture for reliable AI conversations
 
-## Installation
+### 📞 Voice AI
+- **Real-time Voice AI Agents**: LiveKit-powered voice conversations with STT/TTS
+- **Outbound Calls**: Initiate calls with customizable AI agents
+- **Inbound Call Handling**: Automatic call routing and agent dispatch
+- **Call Escalation**: Smart transfer to human supervisors based on conditions
+- **Dynamic Configuration**: Per-call customization of agent behavior
+- **Transcript Capture**: Automatic conversation recording and retrieval
 
-1. Install dependencies:
+### 💬 Multi-Channel Communication
+- **Bulk Communications**: Orchestrate calls, SMS, and emails to multiple contacts
+- **SMS Integration**: Twilio-powered SMS messaging
+- **Email Integration**: SMTP-based email delivery
+- **Parallel Processing**: Handle multiple communications simultaneously
+
+### 🎯 Advanced Features
+- **Multi-language TTS**: Support for multiple languages via ElevenLabs
+- **Custom Voice Selection**: Choose from various voice profiles
+- **Escalation Conditions**: AI-driven call transfer logic
+- **Custom SIP Trunks**: Flexible telephony routing
+- **Comprehensive Logging**: Full audit trail of all operations
+
+## 📋 Table of Contents
+
+- [Installation](#installation)
+- [Environment Configuration](#environment-configuration)
+- [Quick Start](#quick-start)
+- [API Endpoints](#api-endpoints)
+  - [RAG Endpoints](#1-rag-endpoints)
+  - [Voice Call Endpoints](#2-voice-call-endpoints)
+  - [Communication Endpoints](#3-communication-endpoints)
+- [Voice AI Setup](#voice-ai-setup)
+- [Architecture](#architecture)
+- [Usage Examples](#usage-examples)
+- [Project Structure](#project-structure)
+
+## 🔧 Installation
+
+### Prerequisites
+- Python 3.8+
+- OpenAI API key
+- Qdrant instance (cloud or local)
+- MongoDB instance
+- LiveKit server & credentials
+- Twilio account (for SMS)
+- SMTP server (for email)
+
+### Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Set up environment variables:
+### Required Python Packages
+
+```
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+langchain==0.1.0
+langchain-openai==0.0.2
+langgraph==0.0.20
+qdrant-client==1.7.0
+openai==1.6.1
+pymongo==4.6.0
+livekit-agents
+livekit-plugins-elevenlabs
+livekit-plugins-deepgram
+livekit-plugins-openai
+twilio
+pdfplumber==0.10.3
+pandas==2.1.3
+beautifulsoup4==4.12.2
+python-dotenv==1.0.0
+```
+
+## ⚙️ Environment Configuration
+
 Create a `.env` file in the project root:
+
 ```env
-# Qdrant Configuration
+# ============================================================================
+# AI & RAG Configuration
+# ============================================================================
+OPENAI_API_KEY=sk-your-openai-api-key
 QDRANT_URL=https://your-qdrant-instance.cloud.qdrant.io
-QDRANT_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.Mr-rW6Q25j3PE6lJ1ciP1JEaRxkE66lzlBcM2HbQuLI
+QDRANT_API_KEY=your-qdrant-api-key
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net
 
-# OpenAI Configuration
-OPENAI_API_KEY=your-openai-api-key
+# ============================================================================
+# LiveKit Configuration (Voice AI)
+# ============================================================================
+LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-api-secret
 
-# API Configuration (optional)
+# SIP Configuration for Voice Calls
+LIVEKIT_SIP_OUTBOUND_TRUNK=ST_your_trunk_id
+LIVEKIT_SUPERVISOR_PHONE_NUMBER=+1234567890
+
+# Voice AI Models
+STT_MODEL=nova-2  # Deepgram speech-to-text
+LLM_MODEL=gpt-4  # OpenAI model
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+
+# ============================================================================
+# Communication Services
+# ============================================================================
+# Twilio (SMS)
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_NUMBER=+1234567890
+
+# SMTP (Email)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+
+# ============================================================================
+# API Configuration
+# ============================================================================
 API_HOST=0.0.0.0
 API_PORT=8000
 
-# RAG Configuration (optional)
+# RAG Settings
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
+VECTOR_SIZE=1536
+DEFAULT_TOP_K=5
 ```
 
-3. Run the API:
+## 🚀 Quick Start
+
+### 1. Start the API Server
+
 ```bash
 python api.py
 ```
 
 The API will be available at `http://localhost:8000`
 
-## API Endpoints
+### 2. Start Voice AI Agent (for voice calls)
 
-### 1. Chat Endpoint
-Retrieve relevant documents from the knowledge base.
+```bash
+cd voice_backend/outboundService
+python entry.py start
+```
 
-**Endpoint**: `POST /chat`
+### 3. Access API Documentation
 
-**Request Body**:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+## 📡 API Endpoints
+
+### 1. RAG Endpoints
+
+#### Chat with RAG System
+Query your knowledge base with conversational memory.
+
+```bash
+POST /rag/chat
+```
+
+**Request:**
 ```json
 {
   "query": "What is machine learning?",
-  "collection_name": "my_collection",
+  "collection_name": "tech_docs",
   "top_k": 5,
-  "thread_id": "user-123"
+  "thread_id": "user-123",
+  "system_prompt": "You are a helpful AI assistant."
 }
 ```
 
-**Response**:
+**Response:**
 ```json
 {
   "query": "What is machine learning?",
   "answer": "Machine learning is a subset of artificial intelligence...",
   "retrieved_docs": [
     {
-      "text": "Machine learning is...",
+      "text": "Machine learning involves...",
       "score": 0.95,
       "chunk_index": 0
     }
   ],
-  "context": "Document 1 (Score: 0.950):\nMachine learning is...",
+  "context": "Document 1 (Score: 0.950):\nMachine learning...",
   "thread_id": "user-123"
 }
 ```
 
-**Example using curl**:
+#### Data Ingestion
+Ingest data from multiple sources in parallel.
+
 ```bash
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is machine learning?",
-    "collection_name": "my_collection",
-    "top_k": 5,
-    "thread_id": "user-123"
-  }'
+POST /rag/data_ingestion
 ```
 
-**Note**: The `thread_id` parameter is optional but recommended for maintaining conversation context across multiple requests. Use the same thread_id for a conversation session.
+**Multi-part Form Data:**
+- `collection_name`: Collection name
+- `url_links`: Comma-separated URLs
+- `pdf_files`: PDF file(s)
+- `excel_files`: Excel file(s)
 
-### 2. Create Collection Endpoint
-Create a new collection in Qdrant for storing document embeddings.
+**Example:**
+```bash
+curl -X POST "http://localhost:8000/rag/data_ingestion" \
+  -F "collection_name=my_docs" \
+  -F "url_links=https://example.com/page1,https://example.com/page2" \
+  -F "pdf_files=@document.pdf" \
+  -F "excel_files=@data.xlsx"
+```
 
-**Endpoint**: `POST /create_collection`
+#### Collection Management
 
-**Request Body**:
-```json
+**Create Collection:**
+```bash
+POST /rag/create_collection
 {
   "collection_name": "my_collection"
 }
 ```
 
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Collection 'my_collection' created successfully",
-  "details": {
-    "vector_size": 1536,
-    "distance_metric": "cosine"
-  }
-}
-```
-
-**Example using curl**:
+**Delete Collection:**
 ```bash
-curl -X POST "http://localhost:8000/create_collection" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "collection_name": "my_collection"
-  }'
-```
-
-**Note**: Collections are automatically created during data ingestion if they don't exist, but you can use this endpoint to pre-create collections.
-
-### 3. Data Ingestion Endpoint
-Ingest data from various sources into a collection. **Supports multiple sources simultaneously with parallel processing!**
-
-**Endpoint**: `POST /data_ingestion`
-
-**Request Parameters**:
-- `collection_name` (form): Name of the collection
-- `url_links` (form, optional): Comma-separated URLs for website scraping
-- `pdf_files` (file[], optional): Multiple PDF files to upload
-- `excel_files` (file[], optional): Multiple Excel files to upload
-
-**Example - Ingest from Single URL**:
-```bash
-curl -X POST "http://localhost:8000/data_ingestion" \
-  -F "collection_name=my_collection" \
-  -F "url_links=https://example.com/article"
-```
-
-**Example - Ingest from Multiple URLs**:
-```bash
-curl -X POST "http://localhost:8000/data_ingestion" \
-  -F "collection_name=my_collection" \
-  -F "url_links=https://example.com/article1,https://example.com/article2"
-```
-
-**Example - Ingest from Multiple PDFs**:
-```bash
-curl -X POST "http://localhost:8000/data_ingestion" \
-  -F "collection_name=my_collection" \
-  -F "pdf_files=@/path/to/document1.pdf" \
-  -F "pdf_files=@/path/to/document2.pdf"
-```
-
-**Example - Ingest from Multiple Sources (Parallel)**:
-```bash
-curl -X POST "http://localhost:8000/data_ingestion" \
-  -F "collection_name=my_collection" \
-  -F "url_links=https://example.com/article" \
-  -F "pdf_files=@/path/to/document.pdf" \
-  -F "excel_files=@/path/to/data.xlsx"
-```
-
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Successfully ingested 1 URL(s), 1 PDF(s), 1 Excel file(s) into collection 'my_collection'",
-  "details": {
-    "status": "success",
-    "total_chunks_loaded": 156,
-    "sources_processed": 3,
-    "sources_failed": 0,
-    "successful_sources": [
-      {"source": "URL: https://example.com/article", "chunks": 45},
-      {"source": "PDF: /tmp/tmpxxx.pdf", "chunks": 67},
-      {"source": "Excel: /tmp/tmpyyy.xlsx", "chunks": 44}
-    ],
-    "failed_sources": null
-  }
-}
-```
-
-**Note**: All sources are processed **in parallel** for maximum performance. If one source fails, others will still be processed.
-
-### 4. Delete Collection Endpoint
-Delete a collection from Qdrant.
-
-**Endpoint**: `POST /delete_collection`
-
-**Request Body**:
-```json
+POST /rag/delete_collection
 {
   "collection_name": "my_collection"
 }
 ```
 
-**Response**:
+**Get Conversation History:**
+```bash
+GET /rag/conversation_history/{thread_id}
+```
+
+### 2. Voice Call Endpoints
+
+#### Outbound Call
+Initiate an AI-powered outbound call.
+
+```bash
+POST /calls/outbound
+```
+
+**Request:**
 ```json
 {
-  "status": "success",
-  "message": "Collection 'my_collection' deleted successfully"
+  "phone_number": "+1234567890",
+  "name": "John Doe",
+  "dynamic_instruction": "You are a helpful customer service agent for Acme Corp.",
+  "language": "en",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "sip_trunk_id": "ST_custom_trunk",
+  "transfer_to": "+1987654321",
+  "escalation_condition": "Transfer if customer requests supervisor or seems frustrated"
 }
 ```
 
-**Example using curl**:
-```bash
-curl -X POST "http://localhost:8000/delete_collection" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "collection_name": "my_collection"
-  }'
+**Parameters:**
+- `phone_number` (required): Phone number with country code
+- `name` (optional): Caller's name for personalization
+- `dynamic_instruction` (optional): Custom AI agent instructions
+- `language` (optional): TTS language (default: "en")
+- `voice_id` (optional): ElevenLabs voice ID
+- `sip_trunk_id` (optional): Custom SIP trunk
+- `transfer_to` (optional): Phone number for escalation
+- `escalation_condition` (optional): When to escalate
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Outbound call completed to +1234567890 for John Doe",
+  "details": {
+    "phone_number": "+1234567890",
+    "name": "John Doe",
+    "language": "en",
+    "transcript_received": true
+  },
+  "transcript": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Hello John, how can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "I need help with my account"
+      }
+    ]
+  }
+}
 ```
 
-## Testing the API
+#### Outbound Call with Escalation
+Advanced call with supervisor escalation support.
 
-### Interactive API Documentation
-
-Once the server is running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### Example Workflow
-
-1. **Create a collection** (optional - automatically created during ingestion):
 ```bash
-curl -X POST "http://localhost:8000/create_collection" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "collection_name": "tech_docs"
-  }'
+POST /calls/outbound-with-escalation
 ```
 
-2. **Ingest data from multiple sources in parallel**:
+Uses the same request format as `/calls/outbound` but enables full escalation workflow with LiveKit room management.
+
+### 3. Communication Endpoints
+
+#### Bulk Communication
+Send calls, SMS, and emails to multiple contacts simultaneously.
+
 ```bash
-curl -X POST "http://localhost:8000/data_ingestion" \
-  -F "collection_name=tech_docs" \
-  -F "url_links=https://en.wikipedia.org/wiki/Machine_learning,https://en.wikipedia.org/wiki/Deep_learning" \
-  -F "pdf_files=@/path/to/ml_book.pdf"
+POST /bulk-communication/send
 ```
 
-3. **Query the collection**:
+**Request:**
+```json
+{
+  "contacts": [
+    {
+      "name": "John Doe",
+      "phone": "+1234567890",
+      "email": "john@example.com"
+    },
+    {
+      "name": "Jane Smith",
+      "phone": "+1987654321",
+      "email": "jane@example.com"
+    }
+  ],
+  "communication_types": ["call", "sms", "email"],
+  "sms_body": {
+    "message": "Hello! This is a reminder about your appointment."
+  },
+  "email_body": {
+    "subject": "Appointment Reminder",
+    "body": "Hello,\n\nThis is a reminder about your upcoming appointment.",
+    "is_html": false
+  },
+  "dynamic_instruction": "You are a friendly appointment reminder agent.",
+  "language": "en",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "sip_trunk_id": "ST_custom_trunk",
+  "transfer_to": "+1555123456",
+  "escalation_condition": "Transfer if customer wants to reschedule"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Processed 2 contact(s) successfully",
+  "total_contacts": 2,
+  "results": [
+    {
+      "name": "John Doe",
+      "phone": "+1234567890",
+      "email": "john@example.com",
+      "call_status": "success",
+      "transcript": { "messages": [...] },
+      "sms_status": "success",
+      "email_status": "success",
+      "created_at": "2024-01-15T10:30:00",
+      "ended_at": "2024-01-15T10:32:30",
+      "errors": null
+    }
+  ]
+}
+```
+
+#### Send SMS
+
 ```bash
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is supervised learning?",
-    "collection_name": "tech_docs",
+POST /sms/send
+```
+
+**Request:**
+```json
+{
+  "body": "Your verification code is 123456",
+  "number": "+1234567890"
+}
+```
+
+#### Send Email
+
+```bash
+POST /email/send
+```
+
+**Request:**
+```json
+{
+  "receiver_email": "user@example.com",
+  "subject": "Welcome to our service",
+  "body": "Thank you for signing up!",
+  "is_html": false
+}
+```
+
+### 4. LLM Endpoints
+
+#### Elaborate Prompt
+Enhance and elaborate a simple prompt.
+
+```bash
+POST /llm/elaborate_prompt
+```
+
+**Request:**
+```json
+{
+  "prompt": "Write about AI"
+}
+```
+
+## 🎤 Voice AI Setup
+
+### Dynamic Configuration
+
+The voice AI system uses `config.json` for dynamic per-call configuration. This file is automatically updated when you make calls through the API.
+
+**Example config.json:**
+```json
+{
+  "caller_name": "John Doe",
+  "agent_instructions": "You are a helpful customer service agent.",
+  "tts_language": "en",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "transfer_to": "+1987654321",
+  "escalation_condition": "Transfer if customer requests supervisor",
+  "last_updated": 1234567890.123
+}
+```
+
+### Voice Agent Lifecycle
+
+1. **Call Initiated**: API endpoint called with parameters
+2. **Config Updated**: `config.json` written with call-specific settings
+3. **Agent Spawned**: Voice agent reads config and joins LiveKit room
+4. **Conversation**: AI handles conversation with STT/LLM/TTS pipeline
+5. **Escalation** (if needed): Agent transfers call based on escalation condition
+6. **Transcript Saved**: Conversation saved to `transcripts/transcript.json`
+7. **API Response**: Transcript returned to caller
+
+### Available Voices (ElevenLabs)
+
+- `21m00Tcm4TlvDq8ikWAM` - Rachel (default, warm female)
+- `AZnzlk1XvdvUeBnXmlld` - Domi (confident female)
+- `EXAVITQu4vr4xnSDxMaL` - Bella (friendly female)
+- `ErXwobaYiN019PkySvjV` - Antoni (calm male)
+- `MF3mGyEYCl7XYWbV9V6O` - Elli (energetic female)
+- `TxGEqnHWrfWFTfGW9XjX` - Josh (professional male)
+
+### Supported Languages
+
+- `en` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `it` - Italian
+- `pt` - Portuguese
+- `zh` - Chinese
+- `ja` - Japanese
+- And many more via ElevenLabs
+
+## 🏗️ Architecture
+
+### System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      FastAPI Server                         │
+│                    (Island AI API)                          │
+└───────┬─────────────────────────────────────────────────────┘
+        │
+        ├──────────────────────────────────────────────────────┐
+        │                                                       │
+        ▼                                                       ▼
+┌──────────────────┐                              ┌─────────────────────┐
+│   RAG Service    │                              │  Voice AI Service   │
+│                  │                              │                     │
+│ • Qdrant (Vector)│                              │ • LiveKit (WebRTC)  │
+│ • OpenAI (LLM)   │                              │ • Deepgram (STT)    │
+│ • LangGraph      │                              │ • OpenAI (LLM)      │
+│ • MongoDB (Mem)  │                              │ • ElevenLabs (TTS)  │
+└──────────────────┘                              │ • SIP Trunking      │
+                                                  └─────────────────────┘
+        │                                                       │
+        ▼                                                       ▼
+┌──────────────────────────────────────────────────────────────┐
+│              Multi-Channel Communication                     │
+│                                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   SMS        │  │   Email      │  │   Voice      │      │
+│  │   (Twilio)   │  │   (SMTP)     │  │   (SIP)      │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### RAG Workflow (LangGraph)
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                    User Query                             │
+└──────────────────────┬────────────────────────────────────┘
+                       │
+                       ▼
+               ┌───────────────┐
+               │  Entry Point  │
+               └───────┬───────┘
+                       │
+                       ▼
+               ┌───────────────┐
+               │ Retrieve Node │ ◄── Query Qdrant Vector DB
+               │               │     Get top-k documents
+               └───────┬───────┘
+                       │
+                       ▼
+               ┌───────────────┐
+               │ Generate Node │ ◄── OpenAI GPT generates answer
+               │               │     with retrieved context
+               └───────┬───────┘
+                       │
+                       ▼
+           ┌───────────────────────┐
+           │ MongoDB Checkpointer  │ ◄── Save conversation state
+           │  (Memory Persistence) │     for multi-turn chat
+           └───────────────────────┘
+                       │
+                       ▼
+               ┌───────────────┐
+               │   Response    │
+               └───────────────┘
+```
+
+### Voice AI Pipeline
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
+│   Caller    │────▶│   Deepgram   │────▶│  OpenAI     │────▶│  ElevenLabs  │
+│  (Audio In) │     │     (STT)    │     │   (LLM)     │     │    (TTS)     │
+└─────────────┘     └──────────────┘     └─────────────┘     └──────┬───────┘
+                                                                      │
+                                           ┌──────────────────────────┘
+                                           │
+                                           ▼
+                                    ┌─────────────┐
+                                    │  Caller     │
+                                    │ (Audio Out) │
+                                    └─────────────┘
+
+         ┌────────────────────────────────────────────────────────┐
+         │         Dynamic Config (config.json)                   │
+         │  • Agent Instructions • Voice ID • Language            │
+         │  • Transfer Number • Escalation Conditions             │
+         └────────────────────────────────────────────────────────┘
+```
+
+## 📚 Usage Examples
+
+### Example 1: Simple RAG Chat
+
+```python
+import requests
+
+# Ingest data
+requests.post("http://localhost:8000/rag/data_ingestion", 
+    files={
+        "collection_name": (None, "company_docs"),
+        "url_links": (None, "https://example.com/about"),
+        "pdf_files": open("handbook.pdf", "rb")
+    }
+)
+
+# Query
+response = requests.post("http://localhost:8000/rag/chat", json={
+    "query": "What is the company vacation policy?",
+    "collection_name": "company_docs",
     "top_k": 3
-  }'
+})
+
+print(response.json()["answer"])
 ```
 
-4. **Delete the collection** (when done):
-```bash
-curl -X POST "http://localhost:8000/delete_collection" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "collection_name": "tech_docs"
-  }'
+### Example 2: Make an AI Voice Call
+
+```python
+import requests
+
+response = requests.post("http://localhost:8000/calls/outbound", json={
+    "phone_number": "+1234567890",
+    "name": "Sarah Johnson",
+    "dynamic_instruction": "You are calling to confirm an appointment for tomorrow at 2 PM. Be friendly and professional.",
+    "language": "en",
+    "voice_id": "21m00Tcm4TlvDq8ikWAM"
+})
+
+print(f"Call status: {response.json()['status']}")
+print(f"Transcript: {response.json()['transcript']}")
 ```
 
-## Project Structure
+### Example 3: Bulk Communication Campaign
+
+```python
+import requests
+
+response = requests.post("http://localhost:8000/bulk-communication/send", json={
+    "contacts": [
+        {"name": "Alice", "phone": "+1111111111", "email": "alice@example.com"},
+        {"name": "Bob", "phone": "+2222222222", "email": "bob@example.com"}
+    ],
+    "communication_types": ["call", "sms", "email"],
+    "sms_body": {"message": "Reminder: Your appointment is tomorrow at 2 PM."},
+    "email_body": {
+        "subject": "Appointment Reminder",
+        "body": "Hello! This is a friendly reminder about your appointment.",
+        "is_html": False
+    },
+    "dynamic_instruction": "Confirm the appointment and answer any questions."
+})
+
+for result in response.json()["results"]:
+    print(f"{result['name']}: Call={result['call_status']}, SMS={result['sms_status']}, Email={result['email_status']}")
+```
+
+### Example 4: Call with Escalation
+
+```python
+import requests
+
+response = requests.post("http://localhost:8000/calls/outbound", json={
+    "phone_number": "+1234567890",
+    "name": "Customer",
+    "dynamic_instruction": "Handle technical support questions. You can help with basic issues.",
+    "transfer_to": "+1999999999",
+    "escalation_condition": "Transfer to supervisor if issue is complex or customer requests it",
+    "voice_id": "21m00Tcm4TlvDq8ikWAM"
+})
+```
+
+## 📁 Project Structure
 
 ```
-.
-├── config/
-│   ├── __init__.py
-│   ├── settings.py      # Configuration management with environment variables
-│   └── prompt.py        # System prompts for RAG
+Kaplere/
+├── api.py                          # Main FastAPI application
+├── requirements.txt                # Python dependencies
+├── .env                           # Environment variables (create this)
+├── config.json                    # Dynamic voice agent config (auto-generated)
+│
+├── config/                        # Configuration
+│   ├── settings.py               # Settings management
+│   └── prompt.py                 # RAG system prompts
+│
+├── model/                         # Pydantic models
+│   └── model.py                  # Request/response models
+│
+├── routers/                       # API route handlers
+│   ├── rag.py                    # RAG endpoints
+│   ├── calls.py                  # Voice call endpoints
+│   ├── sms.py                    # SMS endpoints
+│   ├── email.py                  # Email endpoints
+│   ├── llm.py                    # LLM endpoints
+│   └── bulk_communication.py     # Bulk communication orchestration
+│
+├── voice_backend/                 # Voice AI services
+│   ├── outboundService/
+│   │   ├── entry.py              # Outbound agent entry point
+│   │   ├── services/
+│   │   │   ├── agent_service.py  # Voice AI agent logic
+│   │   │   └── call_service.py   # Call initiation service
+│   │   └── common/
+│   │       ├── update_config.py  # Dynamic config management
+│   │       └── utils.py          # Utility functions
+│   │
+│   └── inboundService/
+│       ├── entry.py              # Inbound agent entry point
+│       └── services/
+│           └── agent_service.py  # Inbound call handling
+│
+├── workflow/                      # LangGraph workflows
+│   └── graph.py                  # RAG workflow definition
+│
+├── RAGService.py                  # Core RAG service
+├── database/
+│   └── mongo.py                  # MongoDB connection manager
+│
+├── EmailService/
+│   └── email.py                  # Email service
+│
+├── SMSService/
+│   └── sms.py                    # SMS service
+│
+├── llmService/
+│   └── llm.py                    # LLM service
+│
 ├── utils/
-│   ├── __init__.py
-│   └── logger.py        # Centralized logging system
-├── workflow/
-│   ├── __init__.py
-│   └── graph.py         # LangGraph workflow with retrieve & generate nodes
-├── logs/                # Log files directory (auto-created)
-├── RAGService.py        # Core RAG service implementation
-├── api.py               # FastAPI application with endpoints
-├── requirements.txt     # Python dependencies
-├── .env                 # Environment variables (create this file)
-├── .gitignore          # Git ignore rules
-└── README.md           # This file
+│   └── logger.py                 # Centralized logging
+│
+├── logs/                         # Application logs (auto-created)
+└── transcripts/                  # Call transcripts (auto-created)
 ```
 
-## LangGraph Workflow Architecture
+## 🔐 Security Notes
 
-The chat endpoint uses a LangGraph workflow with two nodes and memory checkpointer:
+1. **Never commit `.env` file** - Contains sensitive API keys
+2. **Use environment variables** - All credentials should be in `.env`
+3. **API Authentication** - Consider adding authentication middleware for production
+4. **Rate Limiting** - Implement rate limiting for public endpoints
+5. **Input Validation** - All inputs are validated via Pydantic models
+6. **CORS Configuration** - Currently set to allow all origins (adjust for production)
 
+## 🐛 Troubleshooting
+
+### Voice Calls Not Working
+
+1. Ensure LiveKit agent is running: `python voice_backend/outboundService/entry.py start`
+2. Check LiveKit credentials in `.env`
+3. Verify SIP trunk configuration
+4. Check `agent_debug.log` for errors
+
+### RAG Not Returning Results
+
+1. Verify Qdrant connection
+2. Check if collection exists and has data
+3. Ensure OpenAI API key is valid
+4. Review `logs/RAGService_*.log`
+
+### MongoDB Connection Issues
+
+1. Verify MongoDB URI format
+2. Check network connectivity
+3. Ensure database user has correct permissions
+
+## 📊 Monitoring & Logs
+
+### Log Files
+
+- `logs/RAGService_YYYYMMDD.log` - RAG service logs
+- `agent_debug.log` - Voice agent logs
+- `console_output.log` - General application logs
+
+### Health Check
+
+```bash
+curl http://localhost:8000/health
 ```
-┌─────────────────────────────────────────────────┐
-│           User Query + Collection               │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-         ┌───────────────┐
-         │  Entry Point  │
-         └───────┬───────┘
-                 │
-                 ▼
-         ┌───────────────┐
-         │ Retrieve Node │  ◄── Searches Qdrant vector DB
-         │               │      Retrieves top-k documents
-         └───────┬───────┘
-                 │
-                 ▼
-         ┌───────────────┐
-         │ Generate Node │  ◄── Uses OpenAI GPT-3.5-turbo
-         │               │      Generates answer from context
-         └───────┬───────┘
-                 │
-                 ▼
-         ┌───────────────┐
-         │   Response    │  ◄── Answer + Retrieved Docs
-         └───────────────┘
+
+Returns operational status of all services.
+
+## 🚀 Production Deployment
+
+### Recommendations
+
+1. **Use Docker** - Containerize the application
+2. **Environment Variables** - Use secrets management (AWS Secrets Manager, etc.)
+3. **Load Balancing** - Use nginx or cloud load balancer
+4. **Database** - Use managed services (MongoDB Atlas, etc.)
+5. **Monitoring** - Implement Prometheus/Grafana
+6. **Logging** - Use ELK stack or cloud logging
+7. **CI/CD** - Automate deployment with GitHub Actions
+
+### Docker Example
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+CMD ["python", "api.py"]
 ```
 
-### Workflow Features:
-
-1. **Retrieve Node**: 
-   - Searches the vector database using the user's query
-   - Retrieves top-k most relevant documents
-   - Formats context from retrieved documents
-
-2. **Generate Node**:
-   - Takes retrieved context and user query
-   - Uses OpenAI to generate a comprehensive answer
-   - Returns structured response with sources
-
-3. **Memory Checkpointer**:
-   - In-memory storage for conversation history during session
-   - Maintains context across multiple turns using `thread_id`
-   - Enables follow-up questions and contextual responses
-   - Note: Memory is cleared when the server restarts
-
-## RAGService Class Methods
-
-### Data Ingestion Methods
-- `data_ingestion_pdf(pdf_path)`: Extract text from PDF files
-- `data_ingestion_websites(url)`: Extract text from websites
-- `data_ingestion_excel(excel_path)`: Extract text from Excel files
-
-### Collection Management
-- `create_collection(collection_name)`: Create a new Qdrant collection
-- `delete_collection(collection_name)`: Delete a Qdrant collection
-
-### Data Loading and Retrieval
-- `load_data_to_qdrant(collection_name, url_link, pdf_file, excel_file)`: Load data into Qdrant with embeddings
-- `retrieval_based_search(query, collection_name, top_k)`: Perform vector search
-
-## Logging
-
-The application includes a centralized logging system that:
-- Logs all API requests and responses
-- Tracks errors and exceptions with full stack traces
-- Writes logs to both console and files
-- Creates daily log files in the `logs/` directory
-- Formats logs with timestamps, log levels, and source information
-
-Log files are automatically created in the `logs/` directory with the format: `RAGService_YYYYMMDD.log`
-
-## Technical Details
-
-- **Vector Size**: 1536 (OpenAI embeddings)
-- **Distance Metric**: Cosine similarity
-- **Text Splitting**: Recursive character text splitter (chunk_size=1000, chunk_overlap=200)
-- **Web Framework**: FastAPI with async support
-- **Vector Database**: Qdrant
-- **Logging**: Centralized logging with file and console output
-- **Parallel Processing**: Async data ingestion with ThreadPoolExecutor for concurrent processing of multiple sources
-
-### Data Ingestion Performance
-
-The API supports **parallel data ingestion** from multiple sources:
-- Process URLs, PDFs, and Excel files simultaneously
-- Use `asyncio.gather()` for concurrent execution
-- Each source is processed independently - if one fails, others continue
-- Significantly faster when ingesting multiple documents
-- Example: Ingesting 3 URLs + 2 PDFs simultaneously is ~5x faster than sequential processing
-
-## Requirements
-
-- Python 3.8+
-- OpenAI API key
-- Qdrant instance (cloud or local)
-
-## License
+## 📝 License
 
 MIT License
 
+Copyright (c) 2024 Amar Choudhary
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+See [LICENSE](LICENSE) file for full details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📞 Support
+
+For questions or issues:
+- Check the logs in `logs/` directory
+- Review API documentation at `/docs`
+- Open an issue on GitHub
+
+## 🎯 Roadmap
+
+- [ ] WebSocket support for real-time updates
+- [ ] Support for additional TTS providers
+- [ ] Video call support
+- [ ] Advanced analytics dashboard
+- [ ] Multi-tenant support
+- [ ] API authentication & authorization
+- [ ] Webhook integrations
+- [ ] Call recording storage (S3/Cloud)
+
+---
+
+## 👨‍💻 Author
+
+**Amar Choudhary**
+
+---
+
+**Built with ❤️ using FastAPI, LiveKit, OpenAI, and modern AI technologies**
