@@ -81,6 +81,12 @@ def update_config(
         logger.info(f"  - TTS Language: {config_data['tts_language']}")
         logger.info(f"  - Voice ID: {config_data['voice_id']}")
         
+        # Log additional parameters if present
+        if config_data.get('transfer_to'):
+            logger.info(f"  - Transfer To: {config_data['transfer_to']}")
+        if config_data.get('escalation_condition'):
+            logger.info(f"  - Escalation Condition: {config_data['escalation_condition']}")
+        
         return config_data
         
     except IOError as e:
@@ -160,6 +166,12 @@ def load_dynamic_config() -> Dict[str, Any]:
         logger.info(f"  - Caller Name: {config_data.get('caller_name', 'Not set')}")
         logger.info(f"  - TTS Language: {config_data.get('tts_language', 'Not set')}")
         logger.info(f"  - Voice ID: {config_data.get('voice_id', 'Not set')}")
+        
+        # Log additional parameters if present
+        if config_data.get('transfer_to'):
+            logger.info(f"  - Transfer To: {config_data.get('transfer_to')}")
+        if config_data.get('escalation_condition'):
+            logger.info(f"  - Escalation Condition: {config_data.get('escalation_condition')}")
         
         return config_data
         

@@ -18,6 +18,7 @@ from routers.llm import router as llm_router, init_llm_router
 from routers.sms import router as sms_router
 from routers.email import router as email_router
 from routers.bulk_communication import router as bulk_communication_router
+from routers.tools import router as tools_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -92,6 +93,7 @@ app.include_router(llm_router)
 app.include_router(sms_router)
 app.include_router(email_router)
 app.include_router(bulk_communication_router)
+app.include_router(tools_router)
 
 
 @app.get("/")
@@ -142,6 +144,15 @@ async def root():
                 "endpoints": [
                     "POST /bulk-communication/send - Send bulk communications (calls, SMS, email) to contacts"
                 ]
+            },
+            "Tools": {
+                "prefix": "/tools",
+                "endpoints": [
+                    "POST /tools/register - Register or update a tool with structured schema",
+                    "POST /tools/delete - Delete a tool by tool_id",
+                    "GET /tools/list - List all registered tools",
+                    "GET /tools/get/{tool_id} - Get a specific tool by ID"
+                ]
             }
         }
     }
@@ -152,14 +163,15 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "service": "RAG Service API",
+        "service": "Island AI API",
         "services": {
             "rag": "operational",
             "calls": "operational",
             "llm": "operational",
             "sms": "operational",
             "email": "operational",
-            "bulk_communication": "operational"
+            "bulk_communication": "operational",
+            "tools": "operational"
         }
     }
 

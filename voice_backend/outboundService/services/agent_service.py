@@ -3,7 +3,12 @@ import json
 import asyncio
 import logging
 import sys
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 from livekit import api
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions, function_tool, RunContext, get_job_context
@@ -31,6 +36,16 @@ LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 
+# SMTP Configuration
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("EMAIL_ADDRESS", "")
+SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("EMAIL_ADDRESS", SMTP_USERNAME)
+
+# Tools registry path
+TOOLS_FILE = Path(__file__).parent.parent.parent.parent / "tools.json"
+
 # ------------------------------------------------------------
 # Logging setup
 # ------------------------------------------------------------
@@ -53,6 +68,94 @@ logger.info(f"OPENAI_API_KEY: {'SET' if os.getenv('OPENAI_API_KEY') else 'NOT SE
 logger.info(f"STT_MODEL: {STT_MODEL}")
 logger.info(f"LLM_MODEL: {LLM_MODEL}")
 logger.info("=" * 60)
+
+
+# ------------------------------------------------------------
+# Utility: Load registered tools from tools.json
+# ------------------------------------------------------------
+def load_registered_tools():
+    """
+    Load registered tools from tools.json file.
+    
+    Returns:
+        Dictionary of tools indexed by tool_id
+    """
+    try:
+        if not TOOLS_FILE.exists():
+            logger.warning(f"Tools file not found at {TOOLS_FILE}")
+            return {}
+        
+        with open(TOOLS_FILE, 'r', encoding='utf-8') as f:
+            tools = json.load(f)
+        
+        logger.info(f"Loaded {len(tools)} registered tools")
+        return tools
+    except Exception as e:
+        logger.error(f"Error loading tools: {str(e)}")
+        return {}
+
+
+def get_tool_by_name(tool_name: str) -> Optional[dict]:
+    """
+    Get a tool by its name.
+    
+    Args:
+        tool_name: Name of the tool to retrieve
+        
+    Returns:
+        Tool schema or None if not found
+    """
+    tools = load_registered_tools()
+    for tool_id, tool_data in tools.items():
+        if tool_data.get("tool_name") == tool_name:
+            return tool_data
+    return None
+
+
+def send_smtp_email(to: str, subject: str, body: str, cc: Optional[str] = None):
+    """
+    Send an email using SMTP.
+    
+    Args:
+        to: Recipient email address
+        subject: Email subject
+        body: Email body content
+        cc: CC email address (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_FROM_EMAIL
+        msg['To'] = to
+        msg['Subject'] = subject
+        
+        if cc:
+            msg['Cc'] = cc
+        
+        # Attach body
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Connect to SMTP server
+        logger.info(f"Connecting to SMTP server: {SMTP_SERVER}:{SMTP_PORT}")
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            
+            # Send email
+            recipients = [to]
+            if cc:
+                recipients.append(cc)
+            
+            server.sendmail(SMTP_FROM_EMAIL, recipients, msg.as_string())
+            logger.info(f"Email sent successfully to {to}")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Failed to send email: {str(e)}")
+        return False
 
 
 # ------------------------------------------------------------
@@ -170,6 +273,87 @@ class Assistant(Agent):
         except Exception as e:
             logger_local.error(f"Failed to end call: {e}", exc_info=True)
             return "error"
+    
+    @function_tool
+    async def send_email_tool(
+        self, 
+        ctx: RunContext,
+        tool_name: str,
+        to: str,
+        subject: Optional[str] = None,
+        body: Optional[str] = None,
+        cc: Optional[str] = None
+    ) -> str:
+        """
+        Send an email using a registered tool from tools.json.
+        
+        Args:
+            tool_name: Name of the registered email tool (e.g., "confirm_appoinment")
+            to: Recipient email address
+            subject: Email subject (optional, uses tool default if not provided)
+            body: Email body (optional, uses tool default if not provided)
+            cc: CC email address (optional)
+            
+        Returns:
+            "success" if email sent successfully, "error" otherwise
+        """
+        try:
+            logger.info(f"Attempting to send email using tool: {tool_name}")
+            
+            # Load the tool configuration
+            tool = get_tool_by_name(tool_name)
+            if not tool:
+                logger.error(f"Tool '{tool_name}' not found in registry")
+                return "error: tool not found"
+            
+            # Check if it's an email tool
+            if tool.get("tool_type") != "email":
+                logger.error(f"Tool '{tool_name}' is not an email tool (type: {tool.get('tool_type')})")
+                return "error: not an email tool"
+            
+            # Get default values from tool schema
+            properties = tool.get("schema", {}).get("properties", {})
+            
+            # Use provided values or fall back to tool defaults
+            final_subject = subject if subject is not None else properties.get("subject", {}).get("value", "")
+            final_body = body if body is not None else properties.get("body", {}).get("value", "")
+            final_cc = cc if cc is not None else properties.get("cc", {}).get("value", "")
+            
+            # Validate required fields
+            if not to:
+                logger.error("Recipient email address (to) is required")
+                return "error: recipient email required"
+            
+            if not final_subject:
+                logger.error("Email subject is required")
+                return "error: subject required"
+            
+            if not final_body:
+                logger.error("Email body is required")
+                return "error: body required"
+            
+            logger.info(f"Sending email to: {to}")
+            logger.info(f"Subject: {final_subject}")
+            logger.info(f"Tool: {tool_name}")
+            
+            # Send email using SMTP (only pass cc if it has a value)
+            success = send_smtp_email(
+                to=to,
+                subject=final_subject,
+                body=final_body,
+                cc=final_cc if final_cc else None
+            )
+            
+            if success:
+                logger.info(f"Email sent successfully using tool '{tool_name}'")
+                return "success"
+            else:
+                logger.error("Failed to send email")
+                return "error: failed to send"
+                
+        except Exception as e:
+            logger.error(f"Error in send_email_tool: {str(e)}", exc_info=True)
+            return f"error: {str(e)}"
 
 
 # ------------------------------------------------------------
@@ -198,6 +382,36 @@ async def entrypoint(ctx: agents.JobContext):
         else:
             instructions = dynamic_instruction
         
+        # Load registered tools and add to instructions
+        tools = load_registered_tools()
+        if tools:
+            email_tools = [(t.get("tool_name"), t) for tid, t in tools.items() if t.get("tool_type") == "email"]
+            if email_tools:
+                # Build detailed tool descriptions for AI
+                tools_info = "\n\n=== AVAILABLE EMAIL TOOLS ==="
+                for tool_name, tool_data in email_tools:
+                    tools_info += f"\n\nTool: {tool_name}"
+                    tools_info += f"\nDescription: {tool_data.get('description', 'No description')}"
+                    
+                    # Add properties information
+                    properties = tool_data.get('schema', {}).get('properties', {})
+                    if properties:
+                        tools_info += "\nParameters:"
+                        for prop_name, prop_data in properties.items():
+                            prop_desc = prop_data.get('description', '')
+                            prop_value = prop_data.get('value', '')
+                            prop_required = "REQUIRED" if prop_name in tool_data.get('schema', {}).get('required', []) else "optional"
+                            
+                            tools_info += f"\n  - {prop_name} ({prop_required}): {prop_desc}"
+                            if prop_value:
+                                tools_info += f"\n    Default value: {prop_value}"
+                
+                tools_info += "\n\nTo use: Call send_email_tool(tool_name='<name>', to='<email>', subject='<optional>', body='<optional>', cc='<optional>')"
+                tools_info += "\nIf subject or body are not provided, the tool's default values will be used."
+                
+                instructions += tools_info
+                logger.info(f"  - Loaded {len(email_tools)} email tool(s) with full schemas")
+        
         logger.info("✓ Dynamic configuration loaded successfully")
         logger.info(f"  - Caller Name: {caller_name}")
         logger.info(f"  - TTS Language: {language}")
@@ -205,7 +419,24 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info(f"  - Agent Instructions: {dynamic_instruction[:100]}...")
         if escalation_condition:
             logger.info(f"  - Escalation Condition: {escalation_condition}")
-        logger.info(f"  - Full Instructions: {instructions[:300]}...")
+        
+        # Log full instructions to see what AI knows (first 500 chars)
+        logger.info(f"  - Full Instructions Preview: {instructions[:500]}...")
+        if len(instructions) > 500:
+            logger.info(f"  - Total Instruction Length: {len(instructions)} characters")
+        
+        # Write full instructions to a debug file for inspection
+        try:
+            debug_file = Path("agent_instructions_debug.txt")
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                f.write("=" * 80 + "\n")
+                f.write("FULL AI AGENT INSTRUCTIONS\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(instructions)
+                f.write("\n\n" + "=" * 80 + "\n")
+            logger.info(f"  - Full instructions written to: {debug_file}")
+        except Exception as e:
+            logger.warning(f"Could not write debug file: {str(e)}")
     except Exception as e:
         logger.warning(f"Failed to load dynamic config, using defaults: {str(e)}")
         caller_name = "Guest"

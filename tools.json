@@ -1,0 +1,37 @@
+{
+    "4b85bada-408d-413a-a4f9-92568c51e0d0": {
+        "tool_name": "confirm_appoinment",
+        "tool_type": "email",
+        "description": "Send an email to recipients with optional CC",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "to": {
+                    "type": "string",
+                    "description": "Recipient email address",
+                    "value": "amar_c@me.iitr.ac.in"
+                },
+                "cc": {
+                    "type": "string",
+                    "description": "CC email address",
+                    "value": ""
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Email subject",
+                    "value": "IMPERASOLAR - conferma appuntamento"
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Email body content.",
+                    "value": " You can write {{name}}, {{email}} to insert values that the AI gathered"
+                }
+            },
+            "required": [
+                "to",
+                "subject",
+                "body"
+            ]
+        }
+    }
+}

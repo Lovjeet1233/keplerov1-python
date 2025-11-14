@@ -184,3 +184,44 @@ class BulkCommunicationResponse(BaseModel):
     message: str
     total_contacts: int
     results: list[ContactResult]
+
+
+# ============================================================================
+# TOOL REGISTRATION MODELS
+# ============================================================================
+
+class ToolProperty(BaseModel):
+    """Model for tool property definition."""
+    name: str
+    type: str  # e.g., "string", "number", "boolean", "array"
+    description: Optional[str] = None
+    required: Optional[bool] = False
+    value: Optional[str] = ""  # Default value for the property
+
+
+class RegisterToolRequest(BaseModel):
+    """Request model for registering a tool."""
+    tool_name: str
+    tool_type: str  # e.g., "email", "sms", "api_call", "database"
+    description: str
+    properties: list[ToolProperty]
+
+
+class RegisterToolResponse(BaseModel):
+    """Response model for tool registration."""
+    status: str
+    message: str
+    tool_id: str
+    tool: dict
+
+
+class DeleteToolRequest(BaseModel):
+    """Request model for deleting a tool."""
+    tool_id: str
+
+
+class DeleteToolResponse(BaseModel):
+    """Response model for tool deletion."""
+    status: str
+    message: str
+    tool_id: str

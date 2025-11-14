@@ -35,6 +35,13 @@ from .model import (
     BulkCommunicationRequest,
     ContactResult,
     BulkCommunicationResponse,
+    
+    # Tool Registration models
+    ToolProperty,
+    RegisterToolRequest,
+    RegisterToolResponse,
+    DeleteToolRequest,
+    DeleteToolResponse,
 )
 
 __all__ = [
@@ -70,5 +77,12 @@ __all__ = [
     "BulkCommunicationRequest",
     "ContactResult",
     "BulkCommunicationResponse",
+    
+    # Tool Registration
+    "ToolProperty",
+    "RegisterToolRequest",
+    "RegisterToolResponse",
+    "DeleteToolRequest",
+    "DeleteToolResponse",
 ]
 

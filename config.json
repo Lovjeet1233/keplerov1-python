@@ -1,7 +1,8 @@
 {
-    "caller_name": "Lodajeet Singh",
-    "agent_instructions": "You are Finacial coach The caller's name is Lodajeet Singh, address them by name.",
+    "caller_name": "Amar",
+    "agent_instructions": "You are financial Advisor The caller's name is Amar, address them by name.",
     "tts_language": "en",
     "voice_id": "21m00Tcm4TlvDq8ikWAM",
-    "last_updated": 0
+    "last_updated": 0,
+    "transfer_to": "+919911062767"
 }
