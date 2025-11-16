@@ -27,9 +27,12 @@ jobs:
           source antenv/bin/activate
           pip install -r requirements.txt
       
-      # Ensure startup script has correct permissions
-      - name: Set startup script permissions
-        run: chmod +x startup.sh
+      # Ensure startup script has correct permissions and line endings
+      - name: Prepare startup script
+        run: |
+          sed -i 's/\r$//' startup.sh
+          chmod +x startup.sh
+          cat startup.sh  # Debug: print the file content
                 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -38,6 +41,8 @@ jobs:
           path: |
             .
             !antenv/
+            !.git/
+            !.github/
 
   deploy:
     runs-on: ubuntu-latest
@@ -51,6 +56,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
+      
+      # Verify the file exists
+      - name: Verify startup script
+        run: |
+          ls -la startup.sh
+          cat startup.sh
       
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
