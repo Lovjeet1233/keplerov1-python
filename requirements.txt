@@ -1,21 +1,23 @@
 # Web Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic
+fastapi==0.121.2
+uvicorn[standard]==0.38.0
+starlette==0.49.3
+anyio==4.11.0
+pydantic==2.12.4
 python-multipart==0.0.6
-python-dotenv
+python-dotenv==1.2.1
 
 # Data Processing
-pdfplumber
-openpyxl
-pandas
+pdfplumber==0.11.8
+openpyxl==3.1.5
+pandas==2.3.3
 
 # HTTP & Web Scraping
-requests
-aiohttp
+requests==2.32.5
+aiohttp==3.13.2
 aiohttp-retry==2.9.1
-beautifulsoup4
-lxml
+beautifulsoup4==4.14.2
+lxml==6.0.2
 
 # LLM & RAG
 langchain==1.0.7
@@ -32,21 +34,21 @@ langgraph-sdk==0.2.9
 openai==2.8.0
 
 # Vector Database
-qdrant-client
+qdrant-client==1.15.1
 
 # Database
-pymongo
+pymongo==4.15.4
 
 # LiveKit & Voice AI
-livekit
-livekit-agents
-livekit-plugins-openai
-livekit-plugins-deepgram
-livekit-plugins-elevenlabs
-livekit-plugins-cartesia
-livekit-plugins-silero
-livekit-plugins-google
-livekit-plugins-noise-cancellation
+livekit==1.0.19
+livekit-agents==1.2.18
+livekit-plugins-openai==1.2.18
+livekit-plugins-deepgram==1.2.18
+livekit-plugins-elevenlabs==1.2.18
+livekit-plugins-cartesia==1.2.18
+livekit-plugins-silero==1.2.18
+livekit-plugins-google==1.2.18
+livekit-plugins-noise-cancellation==0.2.5
 
 # Communication Services
 twilio==9.8.6
