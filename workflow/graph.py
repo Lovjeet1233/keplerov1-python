@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from pymongo import MongoClient
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from config.prompt import SYSTEM_PROMPT, RAG_PROMPT_TEMPLATE
 from utils.logger import log_info, log_error, log_debug
 

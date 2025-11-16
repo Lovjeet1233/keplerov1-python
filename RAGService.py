@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Optional, Union
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct

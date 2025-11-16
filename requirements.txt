@@ -13,15 +13,23 @@ pandas
 # HTTP & Web Scraping
 requests
 aiohttp
+aiohttp-retry==2.9.1
 beautifulsoup4
 lxml
 
 # LLM & RAG
-langchain
-langchain-openai
-langchain-community
-langgraph
-openai
+langchain==1.0.7
+langchain-openai==1.0.3
+langchain-community==0.4.1
+langchain-core==1.0.5
+langchain-classic==1.0.0
+langchain-text-splitters==1.0.0
+langgraph==1.0.3
+langgraph-checkpoint==3.0.1
+langgraph-checkpoint-mongodb==0.2.2
+langgraph-prebuilt==1.0.4
+langgraph-sdk==0.2.9
+openai==2.8.0
 
 # Vector Database
 qdrant-client
@@ -40,4 +48,6 @@ livekit-plugins-silero
 livekit-plugins-google
 livekit-plugins-noise-cancellation
 
-
+# Communication Services
+twilio==9.8.6
+phonenumbers==9.0.18
