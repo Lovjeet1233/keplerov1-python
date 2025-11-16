@@ -1,7 +1,9 @@
 {
-    "caller_name": "Lovjeet",
-    "agent_instructions": "you are friendly assistant The caller's name is Lovjeet, address them by name.",
+    "caller_name": "Amar",
+    "agent_instructions": "You are financial coach The caller's name is Amar, address them by name.",
     "tts_language": "en",
     "voice_id": "21m00Tcm4TlvDq8ikWAM",
-    "last_updated": 0
+    "last_updated": 0,
+    "transfer_to": "string",
+    "escalation_condition": "string"
 }

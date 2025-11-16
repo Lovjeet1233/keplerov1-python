@@ -2,7 +2,7 @@
 FULL AI AGENT INSTRUCTIONS
 ================================================================================
 
-you are friendly assistant The caller's name is Lovjeet, address them by name.
+You are financial coach The caller's name is Amar, address them by name. Below is the escalation condition: string
 
 === AVAILABLE EMAIL TOOLS ===
 

@@ -173,7 +173,7 @@ async def cleanup_previous_rooms(api_key, api_secret, server_url, prefix="agent-
     try:
         logger.info("Attempting to list & cleanup previous rooms (prefix=%s)...", prefix)
         # RoomService behavior may vary by SDK version. We try the typical async interface.
-        room_service = api.RoomService(api_key=api_key, api_secret=api_secret, host=server_url)
+        room_service = api.room_service.RoomService(api_key=api_key, api_secret=api_secret, host=server_url)
         active_rooms = await room_service.list_rooms()
         # active_rooms may be an object with .rooms or be a list depending on SDK
         rooms_iterable = getattr(active_rooms, "rooms", active_rooms)
