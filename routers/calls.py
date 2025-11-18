@@ -87,7 +87,7 @@ async def update_dynamic_config(
         log_info(f"  - Escalation Condition: {escalation_condition}")
 
 
-async def wait_for_transcript(timeout: int = 30, check_interval: int = 10) -> Optional[dict]:
+async def wait_for_transcript(timeout: int = 300, check_interval: int = 10) -> Optional[dict]:
     """
     Wait for transcript file to appear in the transcripts folder.
     
@@ -211,7 +211,7 @@ async def outbound_call(request: OutboundCallRequest):
         
         # Wait for transcript to be generated
         log_info("Waiting for call transcript...")
-        transcript = await wait_for_transcript(timeout=30, check_interval=10)
+        transcript = await wait_for_transcript(timeout=300, check_interval=10)
         
         if transcript:
             log_info("Transcript received and will be included in response")
