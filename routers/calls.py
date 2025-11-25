@@ -112,70 +112,14 @@ async def update_dynamic_config(
         log_info(f"  - Custom API Key: {'***' + api_key[-4:] if len(api_key) > 4 else '***'}")
 
 
-async def wait_for_transcript(timeout: int = 300, check_interval: int = 10) -> Optional[dict]:
-    """
-    Wait for transcript file to appear in the transcripts folder.
-    
-    Args:
-        timeout: Maximum time to wait in seconds (default: 300s = 5 minutes)
-        check_interval: Time between checks in seconds (default: 10s)
-        
-    Returns:
-        Transcript data as dict or None if timeout
-    """
-    elapsed_time = 0
-    
-    log_info(f"Starting to monitor for transcript file: {TRANSCRIPT_FILE}")
-    
-    while elapsed_time < timeout:
-        # Check if transcript file exists
-        if TRANSCRIPT_FILE.exists():
-            try:
-                log_info(f"Transcript file found after {elapsed_time} seconds")
-                
-                # Read the transcript
-                with open(TRANSCRIPT_FILE, 'r', encoding='utf-8') as f:
-                    transcript_data = json.load(f)
-                
-                log_info(f"Successfully read transcript file")
-                
-                # Delete the file after reading
-                TRANSCRIPT_FILE.unlink()
-                log_info(f"Transcript file deleted successfully")
-                
-                return transcript_data
-                
-            except Exception as e:
-                log_error(f"Error reading/deleting transcript file: {str(e)}")
-                # Try to delete the file even if reading failed
-                try:
-                    if TRANSCRIPT_FILE.exists():
-                        TRANSCRIPT_FILE.unlink()
-                except:
-                    pass
-                return None
-        
-        # Wait before next check
-        await asyncio.sleep(check_interval)
-        elapsed_time += check_interval
-        
-        if elapsed_time % 30 == 0:  # Log every 30 seconds
-            log_info(f"Still waiting for transcript... ({elapsed_time}s elapsed)")
-    
-    log_warning(f"Transcript not received within {timeout} seconds timeout")
-    return None
-
-
 @router.post("/outbound", response_model=StatusResponse)
 async def outbound_call(request: OutboundCallRequest):
     """
-    Initiate an outbound call to the specified phone number and wait for transcript.
+    Initiate an outbound call to the specified phone number.
     
     This endpoint:
     1. Validates and initiates the outbound call
-    2. Waits for the call to complete and transcript to be saved
-    3. Polls transcripts/transcript.json every 10 seconds (max 5 minutes)
-    4. Returns the transcript and deletes the file
+    2. Returns immediately with status and caller_id (room name)
     
     Args:
         request: OutboundCallRequest containing:
@@ -191,7 +135,7 @@ async def outbound_call(request: OutboundCallRequest):
             - api_key: Custom API key for the provider (optional)
         
     Returns:
-        StatusResponse with call status and transcript (if available)
+        StatusResponse with call status and caller_id (room name)
     
     Example:
         {
@@ -231,49 +175,24 @@ async def outbound_call(request: OutboundCallRequest):
         
         log_info(f"Initiating call to formatted number: '{formatted_number}'")
         
-        # Clear any existing transcript file before making new call
-        if TRANSCRIPT_FILE.exists():
-            try:
-                TRANSCRIPT_FILE.unlink()
-                log_info("Cleared existing transcript file before new call")
-            except Exception as e:
-                log_warning(f"Could not clear existing transcript: {str(e)}")
-        
-        # Make the outbound call
-        await make_outbound_call(
+        # Make the outbound call and get room name
+        participant, room_name = await make_outbound_call(
             phone_number=formatted_number,
             sip_trunk_id=request.sip_trunk_id
         )
         
         log_info(f"Successfully initiated call to '{formatted_number}' for {request.name or 'caller'}")
-        
-        # Wait for transcript to be generated
-        log_info("Waiting for call transcript...")
-        transcript = await wait_for_transcript(timeout=300, check_interval=10)
-        
-        if transcript:
-            log_info("Transcript received and will be included in response")
-        else:
-            log_warning("No transcript received within timeout period")
+        log_info(f"Room name (caller_id): {room_name}")
         
         return StatusResponse(
             status="success",
-            message=f"Outbound call completed to {formatted_number}" + (f" for {request.name}" if request.name else ""),
+            message=f"Outbound call initiated to {formatted_number}" + (f" for {request.name}" if request.name else ""),
             details={
+                "caller_id": room_name,
                 "phone_number": formatted_number,
                 "original_input": request.phone_number,
-                "name": request.name,
-                "has_dynamic_instruction": bool(request.dynamic_instruction),
-                "language": request.language,
-                "voice_id": request.voice_id,
-                "sip_trunk_id": request.sip_trunk_id,
-                "transfer_to": request.transfer_to,
-                "escalation_condition": request.escalation_condition,
-                "provider": request.provider,
-                "has_custom_api_key": bool(request.api_key),
-                "transcript_received": transcript is not None
-            },
-            transcript=transcript
+                "name": request.name
+            }
         )
     
     except HTTPException:

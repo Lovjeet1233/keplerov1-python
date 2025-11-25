@@ -39,7 +39,8 @@ async def create_twilio_sip_trunk(
     print(f"✔ Trunk Domain (Termination URI): {trunk_domain}")
     
     # IMPORTANT: Update trunk to set the geographic location (Active Configuration)
-    print("Setting trunk geographic location to US1...")
+    # Also configure call transfer settings
+    print("Setting trunk geographic location to US1 and configuring call transfer...")
     updated_trunk = twilio_client.trunking.v1.trunks(sip_trunk.sid).update(
         domain_name=trunk_domain,
         disaster_recovery_method="POST",
@@ -47,9 +48,13 @@ async def create_twilio_sip_trunk(
         friendly_name=unique_trunk_name,
         secure=False,
         cnam_lookup_enabled=False,
-        transfer_mode="disable-all"
+        transfer_mode="enable-all",  # Enable all transfer modes (SIP REFER and PSTN)
+        transfer_caller_id="from-transferor"  # Set caller ID as transferor for transfer target
     )
     print(f"✔ Trunk configured for US1 region")
+    print(f"✔ Call Transfer (SIP REFER): Enabled")
+    print(f"✔ Caller ID for Transfer Target: Set as Transferor")
+    print(f"✔ Enable PSTN Transfer: Enabled")
 
     print("Creating Credential List...")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

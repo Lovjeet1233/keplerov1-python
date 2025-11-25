@@ -20,7 +20,7 @@ class MongoDBManager:
     MongoDB Manager for handling chatbot instances and conversation history
     """
     
-    def __init__(self, mongodb_uri: str, database_name: str = "python"):
+    def __init__(self, mongodb_uri: str, database_name: str = "IslandAI"):
         """
         Initialize MongoDB Manager
         
@@ -38,6 +38,7 @@ class MongoDBManager:
             self.instances_collection = self.db["instances"]
             self.chat_history_collection = self.db["chat_history"]
             self.checkpoints_collection = self.db["checkpoints"]
+            self.transcripts_collection = self.db["transcripts"]
             
             # Create indexes for better performance
             self._create_indexes()
@@ -64,6 +65,11 @@ class MongoDBManager:
             
             # Indexes for checkpoints collection (managed by LangGraph MongoDBSaver)
             # Note: LangGraph manages its own indexes for the checkpoints collection
+            
+            # Indexes for transcripts collection
+            self.transcripts_collection.create_index("caller_id")
+            self.transcripts_collection.create_index("timestamp")
+            self.transcripts_collection.create_index("contact_number")
             
             log_info("MongoDB indexes created successfully")
         except Exception as e:
@@ -346,6 +352,101 @@ class MongoDBManager:
             log_exception(f"Error deleting chat history: {str(e)}")
             return 0
     
+    # ==================== Transcript Methods ====================
+    
+    def save_transcript(
+        self,
+        transcript: Dict[str, Any],
+        caller_id: str,
+        name: str,
+        contact_number: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Save a call transcript to the transcripts collection
+        
+        Args:
+            transcript: Transcript data (usually from session.history.to_dict())
+            caller_id: Unique identifier for the caller
+            name: Caller's name
+            contact_number: Caller's contact number (optional)
+            metadata: Additional metadata (optional)
+            
+        Returns:
+            Transcript document ID
+        """
+        try:
+            transcript_data = {
+                "transcript": transcript,
+                "caller_id": caller_id,
+                "name": name,
+                "contact_number": contact_number,
+                "timestamp": datetime.utcnow(),
+                "metadata": metadata or {}
+            }
+            
+            result = self.transcripts_collection.insert_one(transcript_data)
+            transcript_id = str(result.inserted_id)
+            
+            log_info(f"Saved transcript for caller: {name} (ID: {caller_id})")
+            return transcript_id
+            
+        except Exception as e:
+            log_exception(f"Error saving transcript: {str(e)}")
+            raise
+    
+    def get_transcript(self, caller_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get transcript by caller ID
+        
+        Args:
+            caller_id: Caller identifier
+            
+        Returns:
+            Transcript data or None if not found
+        """
+        try:
+            transcript = self.transcripts_collection.find_one({"caller_id": caller_id})
+            if transcript:
+                transcript["_id"] = str(transcript["_id"])
+                log_info(f"Retrieved transcript for caller ID: {caller_id}")
+            return transcript
+        except Exception as e:
+            log_exception(f"Error retrieving transcript: {str(e)}")
+            return None
+    
+    def get_transcripts_by_contact_number(
+        self,
+        contact_number: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Get transcripts by contact number
+        
+        Args:
+            contact_number: Contact number to search for
+            limit: Maximum number of transcripts to return
+            
+        Returns:
+            List of transcript data
+        """
+        try:
+            transcripts = list(
+                self.transcripts_collection
+                .find({"contact_number": contact_number})
+                .sort("timestamp", -1)
+                .limit(limit)
+            )
+            
+            for transcript in transcripts:
+                transcript["_id"] = str(transcript["_id"])
+            
+            log_info(f"Retrieved {len(transcripts)} transcripts for contact: {contact_number}")
+            return transcripts
+        except Exception as e:
+            log_exception(f"Error retrieving transcripts by contact number: {str(e)}")
+            return []
+    
     # ==================== Connection Management ====================
     
     def close(self):
@@ -369,7 +470,7 @@ class MongoDBManager:
 _mongodb_manager = None
 
 
-def get_mongodb_manager(mongodb_uri: Optional[str] = None, database_name: str = "python") -> MongoDBManager:
+def get_mongodb_manager(mongodb_uri: Optional[str] = None, database_name: str = "IslandAI") -> MongoDBManager:
     """
     Get or create MongoDB Manager singleton instance
     

@@ -28,6 +28,11 @@ from common.config.settings import (
 from common.update_config import load_dynamic_config
 from livekit.plugins import elevenlabs
 
+# Add project root to path for database imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+from database.mongo import get_mongodb_manager
+
 load_dotenv()
 
 # ------------------------------------------------------------
@@ -489,21 +494,66 @@ async def entrypoint(ctx: agents.JobContext):
     # --------------------------------------------------------
     # Prepare cleanup callback (save transcript and clean resources)
     # --------------------------------------------------------
+    # Track session start time for duration calculation
+    session_start_time = None
+    
     async def cleanup_and_save():
         try:
             logger.info("Cleanup started...")
             
             # Give websockets time to close gracefully before cleanup
             await asyncio.sleep(1.0)
-            
-            os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
-            filename = f"{TRANSCRIPT_DIR}/transcript.json"
 
             # session may not be defined if start() failed — guard it
             if "session" in locals() and session is not None and hasattr(session, "history"):
-                with open(filename, "w") as f:
-                    json.dump(session.history.to_dict(), f, indent=2)
-                logger.info(f"Transcript saved to {filename}")
+                transcript_data = session.history.to_dict()
+                
+                # Save to MongoDB
+                try:
+                    # Get caller information from dynamic config
+                    logger.info("Saving transcript to MongoDB...")
+                    dynamic_config = load_dynamic_config()
+                    caller_name = dynamic_config.get("caller_name", "Guest")
+                    contact_number = dynamic_config.get("contact_number")  # Optional, may not be in config yet
+                    
+                    # Generate caller_id from room name or use room name as caller_id
+                    caller_id = ctx.room.name if ctx.room else f"call_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    
+                    # Calculate call duration
+                    duration_seconds = None
+                    if session_start_time is not None:
+                        end_time = datetime.utcnow()
+                        duration_delta = end_time - session_start_time
+                        duration_seconds = int(duration_delta.total_seconds())
+                        logger.info(f"Call duration: {duration_seconds} seconds ({duration_delta})")
+                    
+                    # Get MongoDB manager
+                    mongodb_uri = os.getenv("MONGODB_URI")
+                    if mongodb_uri:
+                        mongo_manager = get_mongodb_manager(mongodb_uri)
+                        
+                        # Build metadata with duration
+                        metadata = {
+                            "room_name": ctx.room.name if ctx.room else None,
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                        if duration_seconds is not None:
+                            metadata["duration_seconds"] = duration_seconds
+                            metadata["duration_formatted"] = f"{duration_seconds // 60}m {duration_seconds % 60}s"
+                        
+                        transcript_id = mongo_manager.save_transcript(
+                            transcript=transcript_data,
+                            caller_id=caller_id,
+                            name=caller_name,
+                            contact_number=contact_number,
+                            metadata=metadata
+                        )
+                        logger.info(f"Transcript saved to MongoDB with ID: {transcript_id}")
+                    else:
+                        logger.warning("MONGODB_URI not set, skipping MongoDB transcript save")
+                except Exception as mongo_error:
+                    logger.error(f"Failed to save transcript to MongoDB: {mongo_error}", exc_info=True)
+                    # Don't fail the cleanup if MongoDB save fails
             else:
                 logger.warning("No session history to save (session not created or no history).")
             
@@ -612,6 +662,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     try:
         logger.info("Starting agent session...")
+        
+        # Track session start time for duration calculation
+        session_start_time = datetime.utcnow()
+        logger.info(f"Session start time recorded: {session_start_time.isoformat()}")
 
         await session.start(room=ctx.room, agent=assistant, room_input_options=room_options)
         logger.info("[OK] Agent session started successfully")
