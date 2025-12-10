@@ -190,14 +190,14 @@ async def entrypoint(ctx: agents.JobContext):
         
         # Initialize TTS (ElevenLabs)
         tts_instance = elevenlabs.TTS(
-            voice_id="21m00Tcm4TlvDq8ikWAM",
+            base_url="https://api.eu.residency.elevenlabs.io/v1",
+            voice_id="bIHbv24MWmeRgasZH58o",
             language="en",
         )
         logger.info("[OK] TTS initialized (ElevenLabs)")
         
         # Initialize VAD (Silero)
-        vad_instance = silero.VAD.load(min_silence_duration=0.3,  # 300ms instead of default ~500ms
-    min_speech_duration=0.1)
+        vad_instance = silero.VAD.load()
         logger.info("[OK] VAD initialized (Silero)")
         
         # Create session

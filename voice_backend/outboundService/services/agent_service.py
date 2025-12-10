@@ -674,6 +674,7 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info("Step 3: Initializing TTS (ElevenLabs)")
         try:
             tts_instance = elevenlabs.TTS(
+                base_url="https://api.eu.residency.elevenlabs.io/v1",
                 voice_id=voice_id,
                 language=language,
                 model="eleven_flash_v2_5"
