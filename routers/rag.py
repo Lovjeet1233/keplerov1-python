@@ -41,11 +41,13 @@ async def chat(request: ChatRequest):
     Supports conversation memory via thread_id.
     Stores chatbot instances and chat history in MongoDB.
     Supports multiple LLM providers (OpenAI, Gemini) with custom API keys.
+    NOW SUPPORTS QUERYING FROM MULTIPLE COLLECTIONS!
     
     Args:
         request: ChatRequest containing:
             - query: User's question
-            - collection_name: Qdrant collection name
+            - collection_name: Single collection name (deprecated, for backward compatibility)
+            - collection_names: List of collection names to query from (NEW!)
             - top_k: Number of documents to retrieve (default: 5)
             - thread_id: Thread ID for conversation memory (optional)
             - system_prompt: Custom system prompt (optional)
@@ -55,16 +57,33 @@ async def chat(request: ChatRequest):
     Returns:
         ChatResponse with generated answer and retrieved documents
         
-    Example:
+    Examples:
+        Single collection (backward compatible):
         {
             "query": "What is machine learning?",
             "collection_name": "knowledge_base",
-            "provider": "gemini",
-            "api_key": "your-gemini-api-key"
+            "provider": "openai"
+        }
+        
+        Multiple collections (NEW):
+        {
+            "query": "Compare our products",
+            "collection_names": ["finance_docs", "product_docs", "legal_docs"],
+            "provider": "openai",
+            "top_k": 10
         }
     """
     try:
-        log_info(f"Chat request - Query: '{request.query}', Collection: '{request.collection_name}', Thread: '{request.thread_id}'")
+        # Get collections list (supports both old and new format)
+        collections = request.get_collections()
+        log_info(f"Chat request - Query: '{request.query}', Collections: {collections}, Thread: '{request.thread_id}'")
+        
+        # Validate that at least one collection is specified
+        if not collections:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one collection must be specified (collection_name or collection_names)"
+            )
         
         # Use thread_id as instance_id (or generate a default one)
         instance_id = request.thread_id if request.thread_id else "default"
@@ -75,10 +94,11 @@ async def chat(request: ChatRequest):
             if not existing_instance:
                 mongodb_manager.create_chatbot_instance(
                     instance_id=instance_id,
-                    collection_name=request.collection_name,
+                    collection_name=request.collection_name or ",".join(collections),
                     metadata={
                         "top_k": request.top_k,
-                        "created_via": "chat_endpoint"
+                        "created_via": "chat_endpoint",
+                        "collections": collections
                     }
                 )
                 log_info(f"Created new chatbot instance: {instance_id}")
@@ -92,11 +112,12 @@ async def chat(request: ChatRequest):
             log_error(f"Error managing chatbot instance: {str(e)}")
             # Continue even if instance management fails
         
-        # Run the RAG workflow (retrieve + generate)
+        # Run the RAG workflow (retrieve + generate) with multiple collections support
         log_info(f"Using provider: {request.provider}, Custom API key provided: {bool(request.api_key)}")
         result = rag_workflow.run(
             query=request.query,
-            collection_name=request.collection_name,
+            collection_name=request.collection_name,  # For backward compatibility
+            collection_names=collections,  # New: multiple collections
             top_k=request.top_k,
             thread_id=request.thread_id,
             system_prompt=request.system_prompt,
@@ -104,7 +125,7 @@ async def chat(request: ChatRequest):
             api_key=request.api_key
         )
         
-        log_info(f"Workflow completed - Retrieved {len(result['retrieved_docs'])} documents")
+        log_info(f"Workflow completed - Retrieved {len(result['retrieved_docs'])} documents from {len(collections)} collection(s)")
         
         # Store chat message in MongoDB
         try:
@@ -116,6 +137,7 @@ async def chat(request: ChatRequest):
                 retrieved_docs=result["retrieved_docs"],
                 metadata={
                     "collection_name": request.collection_name,
+                    "collection_names": collections,
                     "top_k": request.top_k
                 }
             )
@@ -148,8 +170,12 @@ async def data_ingestion(
     Data ingestion endpoint that accepts multiple sources simultaneously (URL, PDF, Excel).
     Processes all sources in parallel for faster ingestion.
     
+    All data is ingested into a single Qdrant collection "main_collection" with 
+    "source_collection" metadata set to the collection_name for logical separation.
+    This allows querying from multiple logical collections efficiently.
+    
     Args:
-        collection_name: Name of the collection to store data
+        collection_name: Logical collection name to group the data (stored in metadata)
         url_links: Comma-separated URLs for website scraping (optional)
         pdf_files: List of PDF files to upload (optional)
         excel_files: List of Excel files to upload (optional)
@@ -201,8 +227,9 @@ async def data_ingestion(
         log_info(f"Starting parallel ingestion of {total_sources} source(s)...")
         
         # Use async method for parallel ingestion
+        # Note: collection_name here is the logical collection name (stored in metadata)
         result = await rag_service.load_data_to_qdrant_async(
-            collection_name=collection_name,
+            logical_collection_name=collection_name,
             url_links=urls if urls else None,
             pdf_files=pdf_paths if pdf_paths else None,
             excel_files=excel_paths if excel_paths else None
@@ -297,6 +324,40 @@ async def delete_collection(request: DeleteCollectionRequest):
     except Exception as e:
         log_exception(f"Error deleting collection '{request.collection_name}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Delete collection error: {str(e)}")
+
+
+@router.post("/ensure_indexes", response_model=StatusResponse)
+async def ensure_indexes(collection_name: str = "main_collection"):
+    """
+    Ensure all required payload indexes exist on the collection.
+    This endpoint is useful for fixing existing collections that were created
+    before the multi-collection feature was added.
+    
+    Creates a keyword index on 'source_collection' field for efficient filtering.
+    
+    Args:
+        collection_name: Name of the collection (default: "main_collection")
+        
+    Returns:
+        StatusResponse with index creation status
+        
+    Example:
+        POST /rag/ensure_indexes?collection_name=main_collection
+    """
+    try:
+        log_info(f"Ensuring payload indexes for collection: '{collection_name}'")
+        result = rag_service.ensure_payload_indexes(collection_name)
+        log_info(f"Successfully ensured indexes for collection: '{collection_name}'")
+        
+        return StatusResponse(
+            status="success",
+            message=result["message"],
+            details=result
+        )
+    
+    except Exception as e:
+        log_exception(f"Error ensuring indexes for collection '{collection_name}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ensure indexes error: {str(e)}")
 
 
 @router.get("/conversation_history/{thread_id}")

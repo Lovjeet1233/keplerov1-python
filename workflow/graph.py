@@ -19,7 +19,8 @@ class GraphState(TypedDict):
     
     Attributes:
         query: User's question
-        collection_name: Name of the Qdrant collection
+        collection_name: Name of the Qdrant collection (deprecated, for backward compatibility)
+        collection_names: List of logical collection names to search in
         top_k: Number of documents to retrieve
         retrieved_docs: Retrieved documents from knowledge base
         context: Formatted context from retrieved docs
@@ -31,7 +32,8 @@ class GraphState(TypedDict):
         api_key: API key for the provider
     """
     query: str
-    collection_name: str
+    collection_name: Optional[str]  # Deprecated
+    collection_names: Optional[List[str]]  # New: supports multiple collections
     top_k: int
     retrieved_docs: List[dict]
     context: str
@@ -123,7 +125,8 @@ class RAGWorkflow:
     
     def retrieve_node(self, state: GraphState) -> GraphState:
         """
-        Retrieve relevant documents from the knowledge base
+        Retrieve relevant documents from the knowledge base.
+        Supports multiple logical collections stored in a single Qdrant collection.
         
         Args:
             state: Current graph state
@@ -132,22 +135,35 @@ class RAGWorkflow:
             Updated state with retrieved documents
         """
         try:
-            log_info(f"Retrieving documents for query: '{state['query']}'")
+            # Get collection names from state (supports both old and new format)
+            collections = []
+            if state.get("collection_names"):
+                collections = state["collection_names"]
+            elif state.get("collection_name"):
+                collections = [state["collection_name"]]
             
-            # Retrieve documents using RAG service
+            if not collections:
+                log_error("No collections specified for retrieval")
+                state["retrieved_docs"] = []
+                state["context"] = "No collections specified for search."
+                return state
+            
+            log_info(f"Retrieving documents from collections: {collections} for query: '{state['query']}'")
+            
+            # Retrieve documents using RAG service with multiple collections support
             retrieved_docs = self.rag_service.retrieval_based_search(
                 query=state["query"],
-                collection_name=state["collection_name"],
+                collections=collections,
                 top_k=state.get("top_k", 5)
             )
             
             # Format context from retrieved documents
             if retrieved_docs:
                 context = "\n\n".join([
-                    f"Document {i+1} (Score: {doc['score']:.3f}):\n{doc['text']}"
+                    f"Document {i+1} (from {doc.get('collection', 'unknown')}, Score: {doc['score']:.3f}):\n{doc['text']}"
                     for i, doc in enumerate(retrieved_docs)
                 ])
-                log_info(f"Retrieved {len(retrieved_docs)} documents")
+                log_info(f"Retrieved {len(retrieved_docs)} documents from {len(collections)} collection(s)")
             else:
                 context = "No relevant documents found in the knowledge base."
                 log_info("No documents retrieved")
@@ -271,7 +287,8 @@ class RAGWorkflow:
     def run(
         self,
         query: str,
-        collection_name: str,
+        collection_name: Optional[str] = None,
+        collection_names: Optional[List[str]] = None,
         top_k: int = 5,
         thread_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
@@ -279,11 +296,13 @@ class RAGWorkflow:
         api_key: Optional[str] = None
     ) -> dict:
         """
-        Run the RAG workflow with conversation memory
+        Run the RAG workflow with conversation memory.
+        Supports querying multiple logical collections stored in a single Qdrant collection.
         
         Args:
             query: User's question
-            collection_name: Name of the Qdrant collection
+            collection_name: Single collection name (deprecated, for backward compatibility)
+            collection_names: List of logical collection names to search in
             top_k: Number of documents to retrieve
             thread_id: Optional thread ID for conversation memory
             system_prompt: Optional custom system prompt (uses default if not provided)
@@ -294,7 +313,14 @@ class RAGWorkflow:
             Dictionary with answer and retrieved documents
         """
         try:
-            log_info(f"Running RAG workflow for query: '{query}' (thread: {thread_id or 'default'})")
+            # Determine which collections to use
+            collections = []
+            if collection_names:
+                collections = collection_names
+            elif collection_name:
+                collections = [collection_name]
+            
+            log_info(f"Running RAG workflow for query: '{query}' (collections: {collections}, thread: {thread_id or 'default'})")
             
             # Configuration for thread
             config = {
@@ -319,7 +345,8 @@ class RAGWorkflow:
             # Initialize state with conversation history
             initial_state = {
                 "query": query,
-                "collection_name": collection_name,
+                "collection_name": collection_name,  # Keep for backward compatibility
+                "collection_names": collections,  # New: support multiple collections
                 "top_k": top_k,
                 "retrieved_docs": [],
                 "context": "",

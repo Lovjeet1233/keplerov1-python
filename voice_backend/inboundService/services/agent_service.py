@@ -17,6 +17,7 @@ from livekit.agents import (
 )
 from livekit.plugins import openai, deepgram, noise_cancellation, silero, elevenlabs
 from dotenv import load_dotenv
+from RAGService import RAGService
 
 load_dotenv()
 
@@ -70,6 +71,7 @@ class Assistant(Agent):
         if instructions is None:
             instructions = AGENT_INSTRUCTIONS or "You are a helpful voice AI assistant of Aistein."
         logger.info(f"Agent initialized with instructions: {instructions[:100]}...")
+        self.rag_service = RAGService()
         super().__init__(instructions=instructions)
 
     @function_tool
@@ -126,6 +128,13 @@ class Assistant(Agent):
             logger.error(f"Failed to end call: {e}", exc_info=True)
             return "error"
 
+    @function_tool
+    async def knowledge_base_search(self, query: str) -> str:
+        """Search the knowledge base for the query."""
+        logger.info(f"Knowledge base search requested for query: {query}")
+        
+        answer = self.rag_service.search_knowledge_base(query)
+        return answer
 
 # ------------------------------------------------------------
 # Request handler - CRITICAL FOR AUTO-ACCEPT
@@ -278,7 +287,7 @@ def run_agent():
         # This allows the agent to accept ANY incoming job request
         worker_options = agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
-            request_fnc=request_fnc,  # Auto-accept handler
+            # request_fnc=request_fnc,  # Auto-accept handler
             agent_name="inbound-agent"  # Must match dispatch rule "Agents" field
         )
         

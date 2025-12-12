@@ -26,12 +26,22 @@ class StatusResponse(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     query: str
-    collection_name: str
+    collection_name: Optional[str] = None  # Deprecated: single collection (for backward compatibility)
+    collection_names: Optional[list[str]] = None  # New: multiple collections support
     top_k: Optional[int] = 5
     thread_id: Optional[str] = None
     system_prompt: Optional[str] = None
     provider: Optional[str] = "openai"  # "openai" or "gemini"
     api_key: Optional[str] = None  # Custom API key for the provider
+    
+    def get_collections(self) -> list[str]:
+        """Get list of collections, supporting both single and multiple collection names."""
+        if self.collection_names:
+            return self.collection_names
+        elif self.collection_name:
+            return [self.collection_name]
+        else:
+            return []
 
 
 class ChatResponse(BaseModel):
