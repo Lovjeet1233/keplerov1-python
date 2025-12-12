@@ -303,9 +303,6 @@ class CreateInboundTrunkRequest(BaseModel):
     """Request model for creating inbound SIP trunk."""
     name: str
     phone_numbers: list[str]  # List of phone numbers (e.g., ["+1234567890"])
-    allowed_numbers: Optional[list[str]] = None  # Optional whitelist
-    auth_username: Optional[str] = None
-    auth_password: Optional[str] = None
     krisp_enabled: Optional[bool] = True  # Enable noise cancellation
 
 
@@ -406,7 +403,6 @@ class SetupInboundSIPRequest(BaseModel):
     name: str
     phone_numbers: list[str]
     room_name: str  # Room to dispatch calls to
-    allowed_numbers: Optional[list[str]] = None
     krisp_enabled: Optional[bool] = True
 
 

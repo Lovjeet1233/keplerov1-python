@@ -556,9 +556,6 @@ async def create_inbound_trunk(request: CreateInboundTrunkRequest):
         request: CreateInboundTrunkRequest containing:
             - name: Friendly name for the trunk
             - phone_numbers: List of phone numbers (e.g., ["+1234567890"])
-            - allowed_numbers: Optional whitelist of caller numbers
-            - auth_username: Optional SIP authentication username
-            - auth_password: Optional SIP authentication password
             - krisp_enabled: Enable noise cancellation (default: True)
     
     Returns:
@@ -568,17 +565,12 @@ async def create_inbound_trunk(request: CreateInboundTrunkRequest):
         {
             "name": "MyInboundTrunk",
             "phone_numbers": ["+1234567890", "+0987654321"],
-            "allowed_numbers": ["+1111111111"],
-            "auth_username": "myuser",
-            "auth_password": "mypass123",
             "krisp_enabled": true
         }
     """
     try:
         log_info(f"Creating inbound SIP trunk: '{request.name}'")
         log_info(f"Phone numbers: {', '.join(request.phone_numbers)}")
-        if request.auth_username:
-            log_info(f"Authentication: Username provided")
         
         # Get LiveKit credentials from environment
         livekit_url = os.getenv("LIVEKIT_URL")
@@ -606,17 +598,6 @@ async def create_inbound_trunk(request: CreateInboundTrunkRequest):
             trunk_info = sip.SIPInboundTrunkInfo()
             trunk_info.name = request.name
             trunk_info.numbers.extend(request.phone_numbers)
-            
-            if request.allowed_numbers:
-                trunk_info.allowed_numbers.extend(request.allowed_numbers)
-            
-            # Add authentication if provided
-            if request.auth_username:
-                trunk_info.auth_username = request.auth_username
-            
-            if request.auth_password:
-                trunk_info.auth_password = request.auth_password
-            
             trunk_info.krisp_enabled = request.krisp_enabled
             
             # Create request
@@ -638,12 +619,6 @@ async def create_inbound_trunk(request: CreateInboundTrunkRequest):
             log_info(f"Trunk Name:      {request.name}")
             log_info(f"Trunk ID:        {trunk.sip_trunk_id}")
             log_info(f"Phone Numbers:   {', '.join(request.phone_numbers)}")
-            if request.allowed_numbers:
-                log_info(f"Allowed Numbers: {', '.join(request.allowed_numbers)}")
-            if request.auth_username:
-                log_info(f"Auth Username:   {request.auth_username}")
-            if request.auth_password:
-                log_info(f"Auth Password:   {'*' * len(request.auth_password)}")
             log_info(f"Krisp Enabled:   {request.krisp_enabled}")
             log_info(f"======================================")
             
@@ -777,7 +752,6 @@ async def setup_inbound_sip(request: SetupInboundSIPRequest):
             - name: Name for the trunk and dispatch rule
             - phone_numbers: List of phone numbers (e.g., ["+1234567890"])
             - room_name: Room name to dispatch calls to
-            - allowed_numbers: Optional whitelist of caller numbers
             - krisp_enabled: Enable noise cancellation (default: True)
     
     Returns:
@@ -788,7 +762,6 @@ async def setup_inbound_sip(request: SetupInboundSIPRequest):
             "name": "CustomerSupport",
             "phone_numbers": ["+1234567890"],
             "room_name": "support-room",
-            "allowed_numbers": ["+1111111111"],
             "krisp_enabled": true
         }
     """
@@ -824,10 +797,6 @@ async def setup_inbound_sip(request: SetupInboundSIPRequest):
             trunk_info = sip.SIPInboundTrunkInfo()
             trunk_info.name = request.name
             trunk_info.numbers.extend(request.phone_numbers)
-            
-            if request.allowed_numbers:
-                trunk_info.allowed_numbers.extend(request.allowed_numbers)
-            
             trunk_info.krisp_enabled = request.krisp_enabled
             
             create_trunk_request = sip.CreateSIPInboundTrunkRequest()
@@ -864,8 +833,6 @@ async def setup_inbound_sip(request: SetupInboundSIPRequest):
             log_info(f"--------------------------------------")
             log_info(f"Trunk ID:        {trunk.sip_trunk_id}")
             log_info(f"Phone Numbers:   {', '.join(request.phone_numbers)}")
-            if request.allowed_numbers:
-                log_info(f"Allowed Numbers: {', '.join(request.allowed_numbers)}")
             log_info(f"--------------------------------------")
             log_info(f"Dispatch Rule:   {dispatch_rule.sip_dispatch_rule_id}")
             log_info(f"Target Room:     {request.room_name}")
