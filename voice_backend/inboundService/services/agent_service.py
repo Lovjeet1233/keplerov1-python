@@ -237,6 +237,13 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("=" * 60)
 
     # --------------------------------------------------------
+    # Step 0: Initialize variables for call tracking
+    # --------------------------------------------------------
+    called_number = None  # The inbound number that was dialed
+    caller_number = None  # Who is calling
+    organisation_id = None  # Organization ID for multi-tenant tracking
+
+    # --------------------------------------------------------
     # Step 1: Connect to room
     # --------------------------------------------------------
     try:
@@ -247,9 +254,68 @@ async def entrypoint(ctx: agents.JobContext):
         logger.error(f"[ERROR] Failed to connect to room: {e}", exc_info=True)
         raise
 
-    # Log SIP participant info
+    # --------------------------------------------------------
+    # Step 1.5: Extract SIP call information
+    # --------------------------------------------------------
+    logger.info("Extracting SIP call information...")
     for participant in ctx.room.remote_participants.values():
         logger.info(f"Participant: {participant.identity} - {participant.name}")
+        
+        # Extract SIP attributes if available
+        if hasattr(participant, 'attributes') and participant.attributes:
+            logger.info(f"Participant attributes: {participant.attributes}")
+            
+            # Extract the called number (the inbound number that was dialed)
+            # This could be in different attribute keys depending on LiveKit version
+            called_number = (
+                participant.attributes.get('sip.callTo') or 
+                participant.attributes.get('sip.trunkPhoneNumber') or
+                participant.attributes.get('sip.toNumber')
+            )
+            
+            # Extract the caller's number (who is calling)
+            caller_number = (
+                participant.attributes.get('sip.callFrom') or
+                participant.attributes.get('sip.fromNumber') or
+                participant.attributes.get('sip.callerNumber')
+            )
+            
+            # Clean up phone numbers (remove tel: prefix if present)
+            if called_number:
+                called_number = called_number.replace('tel:', '').replace('+', '')
+                logger.info(f"✓ Called Number (Inbound): +{called_number}")
+            
+            if caller_number:
+                caller_number = caller_number.replace('tel:', '').replace('+', '')
+                logger.info(f"✓ Caller Number: +{caller_number}")
+        else:
+            logger.warning("⚠️ No attributes found on participant")
+    
+    # --------------------------------------------------------
+    # Step 1.6: Map called number to organization
+    # --------------------------------------------------------
+    if called_number:
+        try:
+            # Load phone-to-organization mapping from environment
+            phone_org_map_str = os.getenv("PHONE_ORG_MAP")
+            if phone_org_map_str:
+                import json
+                phone_org_map = json.loads(phone_org_map_str)
+                organisation_id = phone_org_map.get(called_number)
+                
+                if organisation_id:
+                    logger.info(f"✓ Organisation identified: {organisation_id} (from called number: +{called_number})")
+                else:
+                    logger.warning(f"⚠️ No organisation mapping found for called number: +{called_number}")
+                    logger.warning(f"Available mappings: {list(phone_org_map.keys())}")
+            else:
+                logger.warning("⚠️ PHONE_ORG_MAP not configured - cannot identify organisation")
+                logger.info("Set PHONE_ORG_MAP environment variable like: {'14789002879':'org_company1','12025551234':'org_company2'}")
+        except Exception as map_error:
+            logger.error(f"Error mapping phone to organisation: {map_error}", exc_info=True)
+    else:
+        logger.warning("⚠️ Could not extract called number from SIP attributes")
+        logger.info("This may happen if the call hasn't fully connected yet or attributes are not available")
 
     # --------------------------------------------------------
     # Track session variables for cleanup
@@ -391,7 +457,7 @@ async def entrypoint(ctx: agents.JobContext):
         Non-blocking cleanup that runs in background.
         This ensures participant disconnect doesn't block the server.
         """
-        nonlocal egress_id, gcs_bucket, session_start_time
+        nonlocal egress_id, gcs_bucket, session_start_time, called_number, caller_number, organisation_id
         try:
             logger.info("Cleanup started (non-blocking)...")
             
@@ -426,6 +492,17 @@ async def entrypoint(ctx: agents.JobContext):
                             "timestamp": datetime.utcnow().isoformat(),
                             "call_type": "inbound"
                         }
+                        
+                        # Add called number (inbound number that was dialed)
+                        if called_number:
+                            metadata["called_number"] = f"+{called_number}"
+                            logger.info(f"Called number (inbound): +{called_number}")
+                        
+                        # Add caller number (who called)
+                        if caller_number:
+                            metadata["caller_number"] = f"+{caller_number}"
+                            logger.info(f"Caller number: +{caller_number}")
+                        
                         if duration_seconds is not None:
                             metadata["duration_seconds"] = duration_seconds
                             metadata["duration_formatted"] = f"{duration_seconds // 60}m {duration_seconds % 60}s"
@@ -440,7 +517,8 @@ async def entrypoint(ctx: agents.JobContext):
                             transcript=transcript_data,
                             caller_id=caller_id,
                             name="Inbound Caller",
-                            contact_number=None,
+                            contact_number=f"+{caller_number}" if caller_number else None,
+                            organisation_id=organisation_id,
                             metadata=metadata
                         )
                         logger.info(f"Transcript saved to MongoDB with ID: {transcript_id}")

@@ -360,6 +360,7 @@ class MongoDBManager:
         caller_id: str,
         name: str,
         contact_number: Optional[str] = None,
+        organisation_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """
@@ -370,6 +371,7 @@ class MongoDBManager:
             caller_id: Unique identifier for the caller
             name: Caller's name
             contact_number: Caller's contact number (optional)
+            organisation_id: Organisation identifier (optional)
             metadata: Additional metadata (optional)
             
         Returns:
@@ -381,6 +383,7 @@ class MongoDBManager:
                 "caller_id": caller_id,
                 "name": name,
                 "contact_number": contact_number,
+                "organisation_id": organisation_id,
                 "timestamp": datetime.utcnow(),
                 "metadata": metadata or {}
             }

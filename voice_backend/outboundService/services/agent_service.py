@@ -762,6 +762,7 @@ async def entrypoint(ctx: agents.JobContext):
                     dynamic_config = load_dynamic_config()
                     caller_name = dynamic_config.get("caller_name", "Guest")
                     contact_number = dynamic_config.get("contact_number")
+                    organisation_id = dynamic_config.get("organisation_id")
                     
                     # Generate caller_id from room name
                     caller_id = ctx.room.name if ctx.room else f"call_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -799,6 +800,7 @@ async def entrypoint(ctx: agents.JobContext):
                             caller_id=caller_id,
                             name=caller_name,
                             contact_number=contact_number,
+                            organisation_id=organisation_id,
                             metadata=metadata
                         )
                         logger.info(f"Transcript saved to MongoDB with ID: {transcript_id}")

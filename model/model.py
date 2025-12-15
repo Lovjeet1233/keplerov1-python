@@ -88,6 +88,8 @@ class OutboundCallRequest(BaseModel):
     api_key: Optional[str] = None  # Custom API key for the provider
     collection_name: Optional[str] = None  # RAG collection name (deprecated, use collection_names)
     collection_names: Optional[list[str]] = None  # List of RAG collection names for knowledge base queries
+    organisation_id: Optional[str] = None  # Organisation ID for multi-tenant tracking
+    contact_number: Optional[str] = None  # Contact number for the caller (used for MongoDB record)
 
 
 # ============================================================================

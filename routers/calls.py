@@ -49,7 +49,9 @@ async def update_dynamic_config(
     escalation_condition: str = None,
     provider: str = "openai",
     api_key: str = None,
-    collection_names: list = None
+    collection_names: list = None,
+    organisation_id: str = None,
+    contact_number: str = None
 ):
     """
     Update the dynamic configuration (config.json) with agent parameters.
@@ -67,6 +69,8 @@ async def update_dynamic_config(
         provider: LLM provider ("openai" or "gemini", default: "openai")
         api_key: Custom API key for the provider (optional)
         collection_names: List of RAG collection names to search (optional)
+        organisation_id: Organisation ID for multi-tenant tracking (optional)
+        contact_number: Contact number for the caller (optional)
     """
     # Build the full instruction
     if dynamic_instruction:
@@ -92,6 +96,10 @@ async def update_dynamic_config(
         additional_params["api_key"] = api_key
     if collection_names:
         additional_params["collection_names"] = collection_names
+    if organisation_id:
+        additional_params["organisation_id"] = organisation_id
+    if contact_number:
+        additional_params["contact_number"] = contact_number
     
     # Update config.json using the async function
     await update_config_async(
@@ -118,6 +126,10 @@ async def update_dynamic_config(
         log_info(f"  - Custom API Key: {'***' + api_key[-4:] if len(api_key) > 4 else '***'}")
     if collection_names:
         log_info(f"  - RAG Collections: {collection_names}")
+    if organisation_id:
+        log_info(f"  - Organisation ID: {organisation_id}")
+    if contact_number:
+        log_info(f"  - Contact Number: {contact_number}")
 
 
 @router.post("/outbound", response_model=StatusResponse)
@@ -196,7 +208,9 @@ async def outbound_call(request: OutboundCallRequest):
             escalation_condition=request.escalation_condition,
             provider=request.provider,
             api_key=request.api_key,
-            collection_names=collection_names_param
+            collection_names=collection_names_param,
+            organisation_id=request.organisation_id,
+            contact_number=request.contact_number
         )
         log_info("✓ config.json updated successfully")
         
