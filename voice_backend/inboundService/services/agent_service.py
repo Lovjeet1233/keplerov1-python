@@ -270,24 +270,38 @@ async def entrypoint(ctx: agents.JobContext):
             # Validate GCS configuration
             gcs_bucket = os.getenv("GCS_BUCKET_NAME")
             gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            gcs_credentials_json = os.getenv("GCP_CREDENTIALS_JSON")
             
             if not gcs_bucket:
                 logger.warning("GCS_BUCKET_NAME not set - skipping recording")
                 return
             
-            if not gcs_credentials_path:
-                logger.warning("GOOGLE_APPLICATION_CREDENTIALS not set - skipping recording")
+            # Get credentials from either file path or environment variable
+            credentials_json = None
+            
+            # Option 1: Direct JSON from environment variable (recommended for cloud)
+            if gcs_credentials_json:
+                logger.info("Using GCP credentials from GCP_CREDENTIALS_JSON environment variable")
+                credentials_json = gcs_credentials_json
+            
+            # Option 2: Read from file path (for local development)
+            elif gcs_credentials_path:
+                logger.info(f"Using GCP credentials from file: {gcs_credentials_path}")
+                try:
+                    with open(gcs_credentials_path, 'r') as f:
+                        credentials_json = f.read()
+                except FileNotFoundError:
+                    logger.error(f"Credentials file not found: {gcs_credentials_path}")
+                    return
+                except Exception as e:
+                    logger.error(f"Failed to read credentials file: {e}")
+                    return
+            else:
+                logger.warning("No GCP credentials provided (set GCP_CREDENTIALS_JSON or GOOGLE_APPLICATION_CREDENTIALS) - skipping recording")
                 return
             
-            # Read credentials file content
-            try:
-                with open(gcs_credentials_path, 'r') as f:
-                    credentials_json = f.read()
-            except FileNotFoundError:
-                logger.error(f"Credentials file not found: {gcs_credentials_path}")
-                return
-            except Exception as e:
-                logger.error(f"Failed to read credentials file: {e}")
+            if not credentials_json:
+                logger.error("Failed to load GCP credentials")
                 return
             
             # Start room composite egress using the job context API

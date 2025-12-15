@@ -64,3 +64,4 @@ tmp/
 token.json
 dispatch-rule.json
 client_secret.json
+gcp-service-account.json
