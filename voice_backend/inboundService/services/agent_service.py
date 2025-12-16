@@ -49,15 +49,21 @@ TRANSFER_NUMBER = os.getenv("TRANSFER_NUMBER", "+919911062767")
 # ------------------------------------------------------------
 # Logging setup
 # ------------------------------------------------------------
+# Get absolute path for log file
+log_file_path = os.path.join(os.path.dirname(__file__), "..", "..", "inbound_agent_debug.log")
+log_file_path = os.path.abspath(log_file_path)
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("agent_debug.log")
+        logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
     ]
 )
 logger = logging.getLogger("services.agent_service")
+
+logger.info(f"Log file location: {log_file_path}")
 
 logger.info("=" * 60)
 logger.info("Inbound Agent Service Module Loading")
@@ -70,7 +76,8 @@ logger.info(f"ELEVENLABS_API_KEY: {'SET' if os.getenv('ELEVEN_API_KEY') else 'NO
 logger.info(f"QDRANT_URL: {'SET' if os.getenv('QDRANT_URL') else 'NOT SET'}")
 logger.info(f"QDRANT_API_KEY: {'SET' if os.getenv('QDRANT_API_KEY') else 'NOT SET'}")
 logger.info(f"TRANSFER_NUMBER: {TRANSFER_NUMBER}")
-logger.info(f"RAG Mode: Search ALL documents in main_collection (no collection filter)")
+logger.info(f"MONGODB_URI: {'SET' if os.getenv('MONGODB_URI') else 'NOT SET'}")
+logger.info("Multi-Tenant Mode: Agent config loaded per called number from MongoDB")
 logger.info("=" * 60)
 
 # Validate required environment variables
@@ -253,35 +260,6 @@ async def entrypoint(ctx: agents.JobContext):
     organisation_id = None  # Organization ID for multi-tenant tracking
 
     # --------------------------------------------------------
-    # Fetch agent configuration from MongoDB
-    # --------------------------------------------------------
-    agent_config = {}
-    try:
-        mongodb_uri = os.getenv("MONGODB_URI")
-        if mongodb_uri:
-            logger.info("Fetching agent configuration from MongoDB...")
-            mongo_client = MongoClient(mongodb_uri)
-            db = mongo_client["IslandAI"]
-            collection = db["inbound-agent-config"]
-            
-            # Fetch the single document containing agent config
-            agent_config = collection.find_one()
-            
-            if agent_config:
-                logger.info(f"✓ Agent config loaded: voice_id={agent_config.get('voice_id', 'N/A')}, "
-                           f"language={agent_config.get('language', 'N/A')}")
-                logger.info(f"✓ Agent instruction preview: {agent_config.get('agent_instruction', 'N/A')[:100]}...")
-            else:
-                logger.warning("⚠️ No agent config found in MongoDB, using defaults")
-            
-            mongo_client.close()
-        else:
-            logger.warning("⚠️ MONGODB_URI not set, using default agent configuration")
-    except Exception as config_error:
-        logger.error(f"Error loading agent config from MongoDB: {config_error}", exc_info=True)
-        logger.info("Continuing with default configuration...")
-    
-    # --------------------------------------------------------
     # Step 1: Connect to room
     # --------------------------------------------------------
     try:
@@ -293,41 +271,143 @@ async def entrypoint(ctx: agents.JobContext):
         raise
 
     # --------------------------------------------------------
-    # Step 1.5: Extract SIP call information
+    # Step 1.5: Wait for participant and extract SIP call information
     # --------------------------------------------------------
-    logger.info("Extracting SIP call information...")
+    logger.info("Waiting for participant to join...")
+    max_wait_seconds = 10
+    wait_interval = 0.5
+    elapsed = 0
+    
+    while elapsed < max_wait_seconds:
+        if len(ctx.room.remote_participants) > 0:
+            logger.info(f"✓ Participant joined after {elapsed:.1f}s")
+            break
+        await asyncio.sleep(wait_interval)
+        elapsed += wait_interval
+        logger.debug(f"Waiting for participant... {elapsed:.1f}s")
+    
+    if len(ctx.room.remote_participants) == 0:
+        logger.error("❌ No participants joined after waiting")
+    
+    logger.info(f"Extracting SIP call information from {len(ctx.room.remote_participants)} participant(s)...")
+    
     for participant in ctx.room.remote_participants.values():
-        logger.info(f"Participant: {participant.identity} - {participant.name}")
+        logger.info(f"Participant found: identity='{participant.identity}', name='{participant.name}'")
+        logger.debug(f"Participant has attributes: {hasattr(participant, 'attributes')}")
         
         # Extract SIP attributes if available
         if hasattr(participant, 'attributes') and participant.attributes:
-            logger.info(f"Participant attributes: {participant.attributes}")
+            logger.info(f"✓ Participant attributes found: {dict(participant.attributes)}")
+            
+            # Log all available attribute keys for debugging
+            all_keys = list(participant.attributes.keys())
+            logger.debug(f"All available attribute keys: {all_keys}")
             
             # Extract the called number (the inbound number that was dialed)
-            # This could be in different attribute keys depending on LiveKit version
-            called_number = (
-                participant.attributes.get('sip.callTo') or 
-                participant.attributes.get('sip.trunkPhoneNumber') or
-                participant.attributes.get('sip.toNumber')
-            )
+            # Try multiple possible attribute keys
+            called_number_keys = [
+                'sip.callTo', 'sip.trunkPhoneNumber', 'sip.toNumber', 
+                'sip.toUri', 'sip.to', 'sip.toUser', 'sip.phoneNumber'
+            ]
+            called_number = None
+            for key in called_number_keys:
+                if key in participant.attributes:
+                    called_number = participant.attributes.get(key)
+                    logger.debug(f"Found called_number in key '{key}': {called_number}")
+                    break
             
             # Extract the caller's number (who is calling)
-            caller_number = (
-                participant.attributes.get('sip.callFrom') or
-                participant.attributes.get('sip.fromNumber') or
-                participant.attributes.get('sip.callerNumber')
-            )
+            # Try multiple possible attribute keys
+            caller_number_keys = [
+                'sip.callFrom', 'sip.fromNumber', 'sip.callerNumber',
+                'sip.fromUri', 'sip.from', 'sip.fromUser'
+            ]
+            caller_number = None
+            for key in caller_number_keys:
+                if key in participant.attributes:
+                    caller_number = participant.attributes.get(key)
+                    logger.debug(f"Found caller_number in key '{key}': {caller_number}")
+                    break
+            
+            logger.debug(f"Raw called_number extracted: {called_number}")
+            logger.debug(f"Raw caller_number extracted: {caller_number}")
             
             # Clean up phone numbers (remove tel: prefix if present)
             if called_number:
                 called_number = called_number.replace('tel:', '').replace('+', '')
-                logger.info(f"✓ Called Number (Inbound): +{called_number}")
+                logger.info(f"Called Number (Inbound): +{called_number}")
+            else:
+                logger.error(f"Could not extract called number!")
+                logger.error(f"   Tried keys: {called_number_keys}")
+                logger.error(f"   Available keys: {all_keys}")
+                logger.error(f"   Attributes: {dict(participant.attributes)}")
             
             if caller_number:
                 caller_number = caller_number.replace('tel:', '').replace('+', '')
-                logger.info(f"✓ Caller Number: +{caller_number}")
+                logger.info(f"Caller Number: +{caller_number}")
+            else:
+                logger.warning(f"Could not extract caller number")
+                logger.debug(f"   Tried keys: {caller_number_keys}")
         else:
-            logger.warning("⚠️ No attributes found on participant")
+            logger.warning(f"No attributes found on participant '{participant.identity}'")
+    
+    # --------------------------------------------------------
+    # Step 1.5.5: Fetch agent configuration from MongoDB based on called number (Multi-tenant)
+    # --------------------------------------------------------
+    agent_config = {}
+    try:
+        mongodb_uri = os.getenv("MONGODB_URI")
+        logger.debug(f"MONGODB_URI present: {bool(mongodb_uri)}")
+        logger.debug(f"called_number present: {bool(called_number)}, value: {called_number if called_number else 'None'}")
+        
+        if mongodb_uri and called_number:
+            logger.info("=" * 60)
+            logger.info(f"🔍 Fetching agent configuration for called number: +{called_number}")
+            logger.debug(f"Connecting to MongoDB: {mongodb_uri[:20]}...")  # Log partial URI for security
+            
+            mongo_client = MongoClient(mongodb_uri)
+            db = mongo_client["IslandAI"]
+            collection = db["inbound-agent-config"]
+            
+            logger.debug(f"Connected to database: IslandAI, collection: inbound-agent-config")
+            
+            # Query for config matching the called number (multi-tenant lookup)
+            # Format: search for documents where calledNumber matches (with or without + prefix)
+            called_number_formatted = f"+{called_number}"
+            query = {"calledNumber": called_number_formatted}
+            logger.info(f"MongoDB Query: {query}")
+            agent_config = collection.find_one(query)
+            
+            if agent_config:
+                # Remove MongoDB _id for cleaner logging
+                config_for_logging = {k: v for k, v in agent_config.items() if k != '_id'}
+                logger.info(f"✓✓✓ MULTI-TENANT CONFIG FOUND for called number: {called_number_formatted}")
+                logger.debug(f"Full agent config: {config_for_logging}")
+                logger.info(f"  - calledNumber: {agent_config.get('calledNumber', 'N/A')}")
+                logger.info(f"  - voice_id: {agent_config.get('voice_id', 'N/A')}")
+                logger.info(f"  - language: {agent_config.get('language', 'N/A')}")
+                logger.info(f"  - collections: {agent_config.get('collections', 'N/A')}")
+                logger.info(f"  - agent_instruction length: {len(agent_config.get('agent_instruction', ''))} chars")
+                logger.info(f"  - agent_instruction preview: {agent_config.get('agent_instruction', 'N/A')[:100]}...")
+            else:
+                logger.warning(f"No agent config found for called number {called_number_formatted}")
+                logger.info(f"💡 TIP: Create a document in 'inbound-agent-config' collection with:")
+                logger.info(f'    {{"calledNumber": "{called_number_formatted}", "voice_id": "...", "language": "en", ...}}')
+                logger.info("📋 Using default configuration")
+            
+            mongo_client.close()
+            logger.debug("MongoDB connection closed")
+            logger.info("=" * 60)
+        elif not mongodb_uri:
+            logger.warning("MONGODB_URI not set, using default agent configuration")
+        elif not called_number:
+            logger.warning("Called number NOT AVAILABLE - cannot fetch tenant-specific config")
+            logger.warning("📋 Using default agent configuration")
+            logger.info("TIP: Check SIP trunk configuration to ensure phone number is passed in attributes")
+    except Exception as config_error:
+        logger.error(f"Error loading agent config from MongoDB: {config_error}", exc_info=True)
+        logger.info("Continuing with default configuration...")
+        logger.debug(f"agent_config state after error: {agent_config}")
     
     # --------------------------------------------------------
     # Step 1.6: Map called number to organization
@@ -347,13 +427,22 @@ async def entrypoint(ctx: agents.JobContext):
                     logger.warning(f"⚠️ No organisation mapping found for called number: +{called_number}")
                     logger.warning(f"Available mappings: {list(phone_org_map.keys())}")
             else:
-                logger.warning("⚠️ PHONE_ORG_MAP not configured - cannot identify organisation")
+                logger.warning("PHONE_ORG_MAP not configured - cannot identify organisation")
                 logger.info("Set PHONE_ORG_MAP environment variable like: {'14789002879':'org_company1','12025551234':'org_company2'}")
         except Exception as map_error:
             logger.error(f"Error mapping phone to organisation: {map_error}", exc_info=True)
-    else:
-        logger.warning("⚠️ Could not extract called number from SIP attributes")
-        logger.info("This may happen if the call hasn't fully connected yet or attributes are not available")
+    
+    # Final check - log overall extraction status
+    if not called_number:
+        logger.error("=" * 60)
+        logger.error("CRITICAL: Could not extract called number from SIP attributes")
+        logger.error("This prevents multi-tenant configuration lookup!")
+        logger.error("Possible causes:")
+        logger.error("  1. SIP trunk not configured to pass phone number in attributes")
+        logger.error("  2. LiveKit version uses different attribute keys")
+        logger.error("  3. Call attributes not yet available (timing issue)")
+        logger.error(f"Participant count: {len(ctx.room.remote_participants)}")
+        logger.error("=" * 60)
 
     # --------------------------------------------------------
     # Track session variables for cleanup
@@ -595,33 +684,39 @@ async def entrypoint(ctx: agents.JobContext):
     # Step 2: Initialize AI components (STT, LLM, TTS, VAD)
     # --------------------------------------------------------
     try:
+        logger.info("=" * 60)
         logger.info("Initializing AI components...")
+        logger.debug(f"Using agent_config keys: {list(agent_config.keys())}")
         
         # Initialize STT (Deepgram) with language from MongoDB config
         stt_language = agent_config.get('language', "en")
+        logger.debug(f"Initializing STT with language: {stt_language}")
         stt_instance = deepgram.STT(
             model="nova-2-general",
             language=stt_language
         )
-        logger.info(f"[OK] STT initialized (Deepgram nova-2-general) - Language: {stt_language}")
+        logger.info(f"✓ STT initialized (Deepgram nova-2-general) - Language: {stt_language}")
         
         # Initialize LLM (OpenAI)
+        logger.debug("Initializing LLM (OpenAI gpt-4o-mini)")
         llm_instance = openai.LLM(model="gpt-4o-mini")
-        logger.info("[OK] LLM initialized (gpt-4o-mini)")
+        logger.info("✓ LLM initialized (gpt-4o-mini)")
         
         # Initialize TTS (ElevenLabs) with config from MongoDB
         tts_voice_id = agent_config.get('voice_id', "bIHbv24MWmeRgasZH58o")
         tts_language = agent_config.get('language', "en")
+        logger.debug(f"Initializing TTS with voice_id: {tts_voice_id}, language: {tts_language}")
         tts_instance = elevenlabs.TTS(
             base_url="https://api.eu.residency.elevenlabs.io/v1",
             voice_id=tts_voice_id,
             language=tts_language,
         )
-        logger.info(f"[OK] TTS initialized (ElevenLabs) - Voice: {tts_voice_id}, Language: {tts_language}")
+        logger.info(f"✓ TTS initialized (ElevenLabs) - Voice: {tts_voice_id}, Language: {tts_language}")
         
         # Initialize VAD (Silero)
+        logger.debug("Initializing VAD (Silero)")
         vad_instance = silero.VAD.load()
-        logger.info("[OK] VAD initialized (Silero)")
+        logger.info("✓ VAD initialized (Silero)")
         
         # Create session
         logger.info("Creating AgentSession...")
@@ -631,10 +726,11 @@ async def entrypoint(ctx: agents.JobContext):
             llm=llm_instance,
             tts=tts_instance
         )
-        logger.info("[OK] AgentSession created successfully")
+        logger.info("✓ AgentSession created successfully")
+        logger.info("=" * 60)
         
     except Exception as e:
-        logger.error(f"[ERROR] Failed to initialize AI components: {e}", exc_info=True)
+        logger.error(f"❌ Failed to initialize AI components: {e}", exc_info=True)
         raise
 
     # --------------------------------------------------------
