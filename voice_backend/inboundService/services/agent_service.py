@@ -772,8 +772,37 @@ async def entrypoint(ctx: agents.JobContext):
     # Step 4: Send greeting
     # --------------------------------------------------------
     try:
-        # Use greeting from config if available, otherwise use default
-        greeting_message = agent_config.get('greeting_message', "Hello, I'm your AI assistant calling from Aistein. How can I help you today?")
+        # Get caller name (if available from future enhancements, for now it's "there")
+        caller_name = "there"
+        if caller_number:
+            # You could look up the caller name from database here if needed
+            caller_name = "there"
+        
+        # Get language from config
+        greeting_language = agent_config.get('language', 'en')
+        
+        # Multi-language greeting support
+        default_greetings = {
+            "en": f"Hello there, I'm your AI assistant from Aistein. How can I help you today?",
+            "it": f"Ciao , sono il tuo assistente AI di Aistein. Come posso aiutarti oggi?",
+            "es": f"Hola , soy tu asistente de IA de Aistein. ¿Cómo puedo ayudarte hoy?",
+            "ar": f"مرحبا , أنا مساعدك الذكي من Aistein. كيف يمكنني مساعدتك اليوم؟",
+            "tr": f"Merhaba , ben Aistein'dan yapay zeka asistanınızım. Bugün size nasıl yardımcı olabilirim?",
+            "hi": f"नमस्ते , मैं Aistein से आपका एआई सहायक हूँ। मैं आज आपकी कैसे मदद कर सकता हूँ?",
+            "fr": f"Bonjour , je suis votre assistant IA d'Aistein. Comment puis-je vous aider aujourd'hui?",
+            "de": f"Hallo , ich bin Ihr KI-Assistent von Aistein. Wie kann ich Ihnen heute helfen?",
+            "pt": f"Olá , sou seu assistente de IA da Aistein. Como posso ajudá-lo hoje?"
+        }
+        
+        # Check if custom greeting is provided in config, otherwise use language-specific default
+        if agent_config.get('greeting_message'):
+            greeting_message = agent_config.get('greeting_message')
+            logger.info(f"Using custom greeting from config")
+        else:
+            greeting_message = default_greetings.get(greeting_language, default_greetings['en'])
+            logger.info(f"Using default greeting for language: {greeting_language}")
+        
+        logger.info(f"Greeting language: {greeting_language}")
         logger.info(f"Sending greeting: '{greeting_message}'")
         
         await session.say(greeting_message, allow_interruptions=True)
