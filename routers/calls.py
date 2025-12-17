@@ -10,10 +10,10 @@ from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from livekit import api, rtc
+import pymongo
 from utils.logger import log_info, log_error, log_warning, log_exception
 from voice_backend.outboundService.services.call_service import make_outbound_call
 from voice_backend.outboundService.common.utils import validate_phone_number, format_phone_number
-from voice_backend.outboundService.common.update_config import update_config_async
 from model import (
     OutboundCallRequest, 
     StatusResponse, 
@@ -39,97 +39,10 @@ router = APIRouter(prefix="/calls", tags=["Calls"])
 TRANSCRIPT_FOLDER = Path("transcripts")
 TRANSCRIPT_FILE = TRANSCRIPT_FOLDER / "transcript.json"
 
-
-async def update_dynamic_config(
-    dynamic_instruction: str = None,
-    caller_name: str = None,
-    language: str = "en",
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
-    transfer_to: str = None,
-    escalation_condition: str = None,
-    provider: str = "openai",
-    api_key: str = None,
-    collection_names: list = None,
-    organisation_id: str = None,
-    contact_number: str = None
-):
-    """
-    Update the dynamic configuration (config.json) with agent parameters.
-    
-    This replaces the old .env file update approach. The config.json file
-    is read by the agent service on each new call/room connection.
-    
-    Args:
-        dynamic_instruction: Custom instructions for the AI agent
-        caller_name: Name of the person being called
-        language: TTS language (e.g., "en", "es", "fr")
-        voice_id: ElevenLabs voice ID (default: Rachel)
-        transfer_to: Phone number to transfer to (e.g., +1234567890)
-        escalation_condition: Condition when to escalate/transfer the call
-        provider: LLM provider ("openai" or "gemini", default: "openai")
-        api_key: Custom API key for the provider (optional)
-        collection_names: List of RAG collection names to search (optional)
-        organisation_id: Organisation ID for multi-tenant tracking (optional)
-        contact_number: Contact number for the caller (optional)
-    """
-    # Build the full instruction
-    if dynamic_instruction:
-        if caller_name:
-            full_instruction = f"{dynamic_instruction} The caller's name is {caller_name}, address them by name."
-        else:
-            full_instruction = dynamic_instruction
-    else:
-        if caller_name:
-            full_instruction = f"You are a helpful voice AI assistant. The caller's name is {caller_name}, address them by name."
-        else:
-            full_instruction = "You are a helpful voice AI assistant."
-    
-    # Build additional parameters for config
-    additional_params = {}
-    if transfer_to:
-        additional_params["transfer_to"] = transfer_to
-    if escalation_condition:
-        additional_params["escalation_condition"] = escalation_condition
-    if provider:
-        additional_params["provider"] = provider
-    if api_key:
-        additional_params["api_key"] = api_key
-    if collection_names:
-        additional_params["collection_names"] = collection_names
-    if organisation_id:
-        additional_params["organisation_id"] = organisation_id
-    if contact_number:
-        additional_params["contact_number"] = contact_number
-    
-    # Update config.json using the async function
-    await update_config_async(
-        caller_name=caller_name or "Guest",
-        agent_instructions=full_instruction,
-        tts_language=language,
-        voice_id=voice_id,
-        additional_params=additional_params if additional_params else None
-    )
-    
-    log_info(f"Updated config.json with dynamic parameters:")
-    log_info(f"  - Agent Instructions: {full_instruction[:100]}...")
-    if caller_name:
-        log_info(f"  - Caller Name: {caller_name}")
-    log_info(f"  - TTS Language: {language}")
-    log_info(f"  - Voice ID: {voice_id}")
-    if transfer_to:
-        log_info(f"  - Transfer To: {transfer_to}")
-    if escalation_condition:
-        log_info(f"  - Escalation Condition: {escalation_condition}")
-    if provider:
-        log_info(f"  - LLM Provider: {provider}")
-    if api_key:
-        log_info(f"  - Custom API Key: {'***' + api_key[-4:] if len(api_key) > 4 else '***'}")
-    if collection_names:
-        log_info(f"  - RAG Collections: {collection_names}")
-    if organisation_id:
-        log_info(f"  - Organisation ID: {organisation_id}")
-    if contact_number:
-        log_info(f"  - Contact Number: {contact_number}")
+# MongoDB configuration
+MONGODB_URI = os.getenv("MONGODB_URI")
+MONGODB_DATABASE = "IslandAI"
+MONGODB_COLLECTION = "outbound-call-config"
 
 
 @router.post("/outbound", response_model=StatusResponse)
@@ -188,8 +101,8 @@ async def outbound_call(request: OutboundCallRequest):
                 detail="Invalid phone number format. Phone number must start with '+' followed by country code and number (e.g., +1234567890)"
             )
         
-        # Update config.json with dynamic parameters
-        log_info("Updating config.json with dynamic parameters...")
+        # Update MongoDB configuration with dynamic parameters
+        log_info("Updating MongoDB configuration with dynamic parameters...")
         
         # Handle collection_name for backward compatibility
         collection_names_param = None
@@ -199,20 +112,83 @@ async def outbound_call(request: OutboundCallRequest):
             # Convert single collection_name to list for backward compatibility
             collection_names_param = [request.collection_name]
         
-        await update_dynamic_config(
-            dynamic_instruction=request.dynamic_instruction,
-            caller_name=request.name,
-            language=request.language,
-            voice_id=request.voice_id,
-            transfer_to=request.transfer_to,
-            escalation_condition=request.escalation_condition,
-            provider=request.provider,
-            api_key=request.api_key,
-            collection_names=collection_names_param,
-            organisation_id=request.organisation_id,
-            contact_number=request.contact_number
-        )
-        log_info("✓ config.json updated successfully")
+        # Build the full instruction
+        if request.dynamic_instruction:
+            if request.name:
+                full_instruction = f"{request.dynamic_instruction} The caller's name is {request.name}, address them by name."
+            else:
+                full_instruction = request.dynamic_instruction
+        else:
+            if request.name:
+                full_instruction = f"You are a helpful voice AI assistant. The caller's name is {request.name}, address them by name."
+            else:
+                full_instruction = "You are a helpful voice AI assistant."
+        
+        # Connect to MongoDB and update the single document
+        try:
+            if not MONGODB_URI:
+                raise HTTPException(status_code=500, detail="MONGODB_URI not configured")
+            
+            client = pymongo.MongoClient(MONGODB_URI)
+            db = client[MONGODB_DATABASE]
+            collection = db[MONGODB_COLLECTION]
+            
+            # Build update document
+            update_doc = {
+                "caller_name": request.name or "Guest",
+                "agent_instructions": full_instruction,
+                "tts_language": request.language,
+                "voice_id": request.voice_id,
+                "contact_number": request.contact_number
+            }
+            
+            # Add optional fields if provided
+            if request.transfer_to:
+                update_doc["transfer_to"] = request.transfer_to
+            if request.escalation_condition:
+                update_doc["escalation_condition"] = request.escalation_condition
+            if request.provider:
+                update_doc["provider"] = request.provider
+            if request.api_key:
+                update_doc["api_key"] = request.api_key
+            if collection_names_param:
+                update_doc["collection_names"] = collection_names_param
+            if request.organisation_id:
+                update_doc["organisation_id"] = request.organisation_id
+            
+            # Update the single document (upsert if it doesn't exist)
+            result = collection.update_one(
+                {},  # Empty filter to match the single document
+                {"$set": update_doc},
+                upsert=True
+            )
+            
+            client.close()
+            
+            log_info(f"✓ MongoDB configuration updated successfully")
+            log_info(f"  - Agent Instructions: {full_instruction[:100]}...")
+            if request.name:
+                log_info(f"  - Caller Name: {request.name}")
+            log_info(f"  - TTS Language: {request.language}")
+            log_info(f"  - Voice ID: {request.voice_id}")
+            if request.transfer_to:
+                log_info(f"  - Transfer To: {request.transfer_to}")
+            if request.escalation_condition:
+                log_info(f"  - Escalation Condition: {request.escalation_condition}")
+            if request.provider:
+                log_info(f"  - LLM Provider: {request.provider}")
+            if request.api_key:
+                log_info(f"  - Custom API Key: {'***' + request.api_key[-4:] if len(request.api_key) > 4 else '***'}")
+            if collection_names_param:
+                log_info(f"  - RAG Collections: {collection_names_param}")
+            if request.organisation_id:
+                log_info(f"  - Organisation ID: {request.organisation_id}")
+            if request.contact_number:
+                log_info(f"  - Contact Number: {request.contact_number}")
+                
+        except Exception as e:
+            log_error(f"Failed to update MongoDB configuration: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"MongoDB update error: {str(e)}")
         
         log_info(f"Initiating call to formatted number: '{formatted_number}'")
         

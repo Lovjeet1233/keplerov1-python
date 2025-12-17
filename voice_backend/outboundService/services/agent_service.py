@@ -31,13 +31,13 @@ from livekit.plugins import (
     google
 )
 from RAGService import RAGService
+import pymongo
 
 # from voice_backend.outboundService.common.config.settings import ROOM_NAME
 from dotenv import load_dotenv
 from common.config.settings import (
     TTS_MODEL, TTS_VOICE, STT_MODEL, STT_LANGUAGE, LLM_MODEL, TRANSCRIPT_DIR, PARTICIPANT_IDENTITY
 )
-from common.update_config import load_dynamic_config
 from livekit.plugins import elevenlabs
 
 # Add project root to path for database imports
@@ -64,11 +64,16 @@ SMTP_FROM_EMAIL = os.getenv("EMAIL_ADDRESS", SMTP_USERNAME)
 # Tools registry path
 TOOLS_FILE = Path(__file__).parent.parent.parent.parent / "tools.json"
 
-# Global caches to avoid repeated file I/O during conversation
+# Global caches to avoid repeated DB queries during conversation
 _TOOLS_CACHE = None
 _DYNAMIC_CONFIG_CACHE = None
 _CACHE_TIMESTAMP = 0
-CACHE_TTL = 60  # Cache for 60 seconds
+CACHE_TTL = 30  # Cache for 60 seconds
+
+# MongoDB configuration
+MONGODB_URI = os.getenv("MONGODB_URI")
+MONGODB_DATABASE = "IslandAI"
+MONGODB_COLLECTION = "outbound-call-config"
 
 # ------------------------------------------------------------
 # Logging setup
@@ -149,6 +154,62 @@ def get_tool_by_name(tool_name: str) -> Optional[dict]:
         if tool_data.get("tool_name") == tool_name:
             return tool_data
     return None
+
+
+def load_dynamic_config_from_mongodb():
+    """
+    Load dynamic configuration from MongoDB with caching.
+    This replaces the file-based config.json approach for multi-tenant support.
+    
+    Returns:
+        Dictionary containing configuration data
+    """
+    global _DYNAMIC_CONFIG_CACHE, _CACHE_TIMESTAMP
+    import time
+    
+    current_time = time.time()
+    
+    # Return cached config if still valid
+    if _DYNAMIC_CONFIG_CACHE is not None and (current_time - _CACHE_TIMESTAMP) < CACHE_TTL:
+        return _DYNAMIC_CONFIG_CACHE
+    
+    try:
+        if not MONGODB_URI:
+            logger.error("MONGODB_URI not set in environment")
+            return {}
+        
+        # Connect to MongoDB
+        client = pymongo.MongoClient(MONGODB_URI)
+        db = client[MONGODB_DATABASE]
+        collection = db[MONGODB_COLLECTION]
+        
+        # Get the single configuration document
+        config_doc = collection.find_one()
+        
+        if not config_doc:
+            logger.warning(f"No configuration document found in {MONGODB_DATABASE}.{MONGODB_COLLECTION}")
+            return {}
+        
+        # Remove MongoDB's _id field from the config
+        if '_id' in config_doc:
+            del config_doc['_id']
+        
+        # Update cache
+        _DYNAMIC_CONFIG_CACHE = config_doc
+        _CACHE_TIMESTAMP = current_time
+        
+        logger.info(f"Loaded dynamic config from MongoDB (cached for {CACHE_TTL}s)")
+        logger.info(f"Config keys: {list(config_doc.keys())}")
+        
+        # Close connection
+        client.close()
+        
+        return config_doc
+        
+    except Exception as e:
+        logger.error(f"Error loading config from MongoDB: {str(e)}")
+        # Return stale cache if available, otherwise empty dict
+        return _DYNAMIC_CONFIG_CACHE if _DYNAMIC_CONFIG_CACHE is not None else {}
 
 
 async def send_smtp_email(to: str, subject: str, body: str, cc: Optional[str] = None):
@@ -285,18 +346,9 @@ class Assistant(Agent):
             logger.error("Job context not found")
             return "error"
         
-        # Load transfer_to from dynamic config (using cache to avoid blocking I/O)
-        global _DYNAMIC_CONFIG_CACHE, _CACHE_TIMESTAMP
-        import time
-        
-        current_time = time.time()
-        
-        # Refresh cache if expired
-        if _DYNAMIC_CONFIG_CACHE is None or (current_time - _CACHE_TIMESTAMP) >= CACHE_TTL:
-            _DYNAMIC_CONFIG_CACHE = load_dynamic_config()
-            _CACHE_TIMESTAMP = current_time
-        
-        transfer_to_number = _DYNAMIC_CONFIG_CACHE.get("transfer_to", "+919911062767")
+        # Load transfer_to from MongoDB config (using cache to avoid blocking DB queries)
+        dynamic_config = load_dynamic_config_from_mongodb()
+        transfer_to_number = dynamic_config.get("transfer_to", "+919911062767")
         
         # Ensure the transfer_to number has the "tel:" prefix for SIP
         if not transfer_to_number.startswith("tel:"):
@@ -506,11 +558,11 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info(f"ENTRYPOINT CALLED - Room: {ctx.room.name}")
     logger.info("=" * 60)
 
-    # Load dynamic configuration from config.json
+    # Load dynamic configuration from MongoDB
     try:
-        logger.info("Loading dynamic configuration from config.json...")
+        logger.info("Loading dynamic configuration from MongoDB...")
         
-        dynamic_config = load_dynamic_config()
+        dynamic_config = load_dynamic_config_from_mongodb()
         caller_name = dynamic_config.get("caller_name", "Guest")
         dynamic_instruction = dynamic_config.get("agent_instructions", "You are a helpful voice AI assistant.")
         language = dynamic_config.get("tts_language", "en")
@@ -757,9 +809,9 @@ async def entrypoint(ctx: agents.JobContext):
                 
                 # Save to MongoDB in background (don't block disconnect)
                 try:
-                    # Get caller information from dynamic config (use cached version)
+                    # Get caller information from MongoDB config (use cached version)
                     logger.info("Saving transcript to MongoDB...")
-                    dynamic_config = load_dynamic_config()
+                    dynamic_config = load_dynamic_config_from_mongodb()
                     caller_name = dynamic_config.get("caller_name", "Guest")
                     contact_number = dynamic_config.get("contact_number")
                     organisation_id = dynamic_config.get("organisation_id")
@@ -881,7 +933,8 @@ async def entrypoint(ctx: agents.JobContext):
                 base_url="https://api.eu.residency.elevenlabs.io/v1",
                 voice_id=voice_id,
                 language=language,
-                model="eleven_flash_v2_5"
+                model="eleven_flash_v2_5",
+                api_key=os.getenv("ELEVEN_API_KEY")
             )
         #     tts_instance = cartesia.TTS(
         #     model='sonic-3',

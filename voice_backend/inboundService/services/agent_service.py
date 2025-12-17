@@ -463,7 +463,7 @@ async def entrypoint(ctx: agents.JobContext):
             # Validate GCS configuration
             gcs_bucket = os.getenv("GCS_BUCKET_NAME")
             gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            gcs_credentials_json = os.getenv("GCP_CREDENTIALS_JSON")
+            # gcs_credentials_json = os.getenv("GCP_CREDENTIALS_JSON")
             
             if not gcs_bucket:
                 logger.warning("GCS_BUCKET_NAME not set - skipping recording")
