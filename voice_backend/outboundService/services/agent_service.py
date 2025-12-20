@@ -524,7 +524,7 @@ class Assistant(Agent):
             search_results = self.rag_service.retrieval_based_search(
                 query=query,
                 collections=collections,
-                top_k=3
+                top_k=1
             )
             
             # Format results into a readable answer
