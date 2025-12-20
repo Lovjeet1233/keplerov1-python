@@ -9,7 +9,6 @@ from livekit.agents import (
     WorkerOptions,
     JobContext,
     AgentSession,
-    function_tool,
     RunContext,
 )
 from livekit.agents.voice import Agent
@@ -38,132 +37,127 @@ logger = logging.getLogger("livekit-agent")
 # ------------------------------------------------------------
 # Agent Instructions
 # ------------------------------------------------------------
-AGENT_INSTRUCTIONS = """You are a helpful voice AI assistant.
+AGENT_INSTRUCTIONS = """You are a helpful voice AI assistant. Be concise and conversational.
 
-When users ask questions, use the knowledge_base_search tool to find relevant information, then naturally incorporate that information into your conversational response. Speak naturally and fluidly as if the information is part of your knowledge.
-
-Be conversational, friendly, and helpful in your responses."""
+When relevant context is provided in your system context, use it naturally in your response. If no context is provided, answer based on your general knowledge."""
 
 # ------------------------------------------------------------
-# Custom Agent with Tools
+# Custom Agent with Proactive RAG
 # ------------------------------------------------------------
 class MyAssistant(Agent):
     def __init__(self):
-        # Initialize RAG service with environment variables
+        # Initialize RAG service
         try:
             openai_api_key = os.getenv("OPENAI_API_KEY")
             
             self.rag_service = RAGService(
                 openai_api_key=openai_api_key
-                )
+            )
             logger.info("✓ RAG service initialized")
         except Exception as e:
             logger.error(f"RAG service initialization failed: {e}", exc_info=True)
             self.rag_service = None
         
-        # Cache for search results
-        self.search_cache = {}
-        
         super().__init__(instructions=AGENT_INSTRUCTIONS)
     
-    async def _perform_search_background(self, query: str):
-        """Background task to perform knowledge base search."""
+    async def before_llm_inference(self, ctx: RunContext):
+        """
+        Hook that runs BEFORE the LLM is called. We inject RAG context here
+        so the agent can speak immediately without tool call delays.
+        """
+        # Get the user's last message
+        chat_ctx = ctx.chat_context
+        if not chat_ctx or not chat_ctx.messages:
+            return
+        
+        last_message = chat_ctx.messages[-1]
+        if last_message.role != "user":
+            return
+        
+        user_query = last_message.content
+        logger.info(f"🔍 Proactive RAG search for: {user_query}")
+        
+        if not self.rag_service:
+            return
+        
         try:
-            logger.info(f"🔍 Background search starting: {query}")
-            
-            search_results = self.rag_service.retrieval_based_search(
-                query=query,
-                collections=None,
-                top_k=1
+            # Quick RAG search with timeout to prevent blocking
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.rag_service.retrieval_based_search,
+                    query=user_query,
+                    collections=None,
+                    top_k=1
+                ),
+                timeout=1.0  # 1 second max - adjust based on your needs
             )
             
             if search_results and len(search_results) > 0:
-                context_parts = []
-                for result in search_results[:3]:
-                    text = result.get('text', '').strip()
-                    if text:
-                        context_parts.append(text)
-                
-                context_text = "\n\n".join(context_parts)
-                self.search_cache[query] = context_text
-                logger.info(f"✓ Background search completed: found {len(search_results)} results")
+                context = search_results[0].get('text', '').strip()
+                if context:
+                    # Inject context into the chat as a system message
+                    chat_ctx.append(
+                        role="system",
+                        text=f"Relevant context from knowledge base: {context}"
+                    )
+                    logger.info("✓ RAG context injected into chat")
             else:
-                logger.info(f"No results found for: {query}")
-                self.search_cache[query] = ""
+                logger.info("No RAG results found")
                 
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ RAG search timed out - continuing without context")
         except Exception as e:
-            logger.error(f"Background search error: {e}", exc_info=True)
-            self.search_cache[query] = ""
-    
-    @function_tool
-    async def knowledge_base_search(self, query: str) -> str:
-        """
-        Search the knowledge base for relevant information. This function returns immediately
-        while the search continues in the background, allowing the agent to start speaking
-        without delay.
-        
-        Args:
-            query: The user's question or topic to search for
-        """
-        logger.info(f"🔍 Knowledge base search requested: {query}")
-        
-        if not self.rag_service:
-            logger.warning("RAG service not available")
-            return "Use your general knowledge to answer this question."
-        
-        # Start background search task
-        asyncio.create_task(self._perform_search_background(query))
-        
-        # Return immediately so agent can start speaking
-        logger.info("✓ Search started in background, agent can speak now")
-        return "Answer based on your knowledge. Additional details may be available from the knowledge base."
+            logger.error(f"RAG search error: {e}")
 
 # ---------------- Entrypoint ---------------- #
 async def entrypoint(ctx: JobContext):
     logger.info("🚀 Agent starting...")
 
-    # 1️⃣ Connect to room FIRST
+    # Connect to room
     await ctx.connect()
     logger.info("🔗 Connected to LiveKit room")
 
-    # ---------------- STT ---------------- #
+    # ---------------- STT - OPTIMIZED ---------------- #
     stt = deepgram.STT(
         model="nova-2-general",
         language="en",
+        interim_results=True,
+        endpointing_ms=200,
     )
-    logger.info("✓ STT initialized (Deepgram)")
+    logger.info("✓ STT initialized (Deepgram - optimized)")
 
-    # ---------------- LLM ---------------- #
-    # llm = openai.LLM(
-    #     model="gpt-5-nano",
-    # )
+    # ---------------- LLM - OPTIMIZED ---------------- #
     llm = google.LLM(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.0-flash-exp",
         api_key=os.getenv("GOOGLE_API_KEY"),
+        temperature=0.7,
     )
-    logger.info("✓ LLM initialized (gemini-2.5-flash-lite)")
+    logger.info("✓ LLM initialized (gemini-2.0-flash-exp)")
 
-    # ---------------- TTS ---------------- #
+    # ---------------- TTS - OPTIMIZED ---------------- #
     tts = elevenlabs.TTS(
         base_url="https://api.eu.residency.elevenlabs.io/v1",
-        voice_id="TxGEqnHWrfWFTfGW9XjX",
+        voice_id="Xb7hH8MSUJpSbSDYk0k2",
         api_key=os.getenv("ELEVEN_API_KEY"),
-        model="eleven_flash_v2_5",
+        model="eleven_turbo_v2_5",
         language="en",
-        streaming_latency=4
-
+        streaming_latency=1,
+        chunk_length_schedule=[80, 120, 150],
     )
-    logger.info("✓ TTS initialized (ElevenLabs)")
+    logger.info("✓ TTS initialized (ElevenLabs Turbo)")
 
-    # ---------------- VAD ---------------- #
-    vad = silero.VAD.load()
-    logger.info("✓ VAD initialized (Silero)")
+    # ---------------- VAD - OPTIMIZED ---------------- #
+    vad = silero.VAD.load(
+        min_speech_duration=0.1,
+        min_silence_duration=0.3,
+    )
+    logger.info("✓ VAD initialized (Silero - optimized)")
 
     # ---------------- Voice Agent ---------------- #
     assistant = MyAssistant()
-    logger.info("🤖 Agent created with knowledge base tool")
+    logger.info("🤖 Agent created with proactive RAG")
 
-    # ---------------- Agent Session ---------------- #
+    # ---------------- Agent Session - OPTIMIZED ---------------- #
     session = AgentSession(
         vad=vad,
         stt=stt,
@@ -172,7 +166,7 @@ async def entrypoint(ctx: JobContext):
     )
     logger.info("📋 Session created")
 
-    # 2️⃣ Start session
+    # Start session
     await session.start(
         room=ctx.room,
         agent=assistant

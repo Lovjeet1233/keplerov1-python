@@ -334,6 +334,55 @@ class Assistant(Agent):
         
         super().__init__(instructions=instructions)
 
+    async def before_llm_inference(self, ctx: RunContext):
+        """
+        Hook that runs BEFORE the LLM is called. We inject RAG context here
+        so the agent can speak immediately without tool call delays.
+        """
+        # Get the user's last message
+        chat_ctx = ctx.chat_context
+        if not chat_ctx or not chat_ctx.messages:
+            return
+        
+        last_message = chat_ctx.messages[-1]
+        if last_message.role != "user":
+            return
+        
+        user_query = last_message.content
+        logger.info(f"🔍 Proactive RAG search for: {user_query}")
+        
+        if not self.rag_service:
+            return
+        
+        try:
+            # Quick RAG search with timeout to prevent blocking
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.rag_service.retrieval_based_search,
+                    query=user_query,
+                    collections=self.collection_names,
+                    top_k=1
+                ),
+                timeout=1.0  # 1 second max - adjust based on your needs
+            )
+            
+            if search_results and len(search_results) > 0:
+                context = search_results[0].get('text', '').strip()
+                if context:
+                    # Inject context into the chat as a system message
+                    chat_ctx.append(
+                        role="system",
+                        text=f"Relevant context from knowledge base: {context}"
+                    )
+                    logger.info("✓ RAG context injected into chat")
+            else:
+                logger.info("No RAG results found")
+                
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ RAG search timed out - continuing without context")
+        except Exception as e:
+            logger.error(f"RAG search error: {e}")
+
     @function_tool
     async def transfer_to_human(self, ctx: RunContext) -> str:
         """Transfer active SIP caller to a human number. if it satisfies the escalation condition, transfer to the human number."""
@@ -476,74 +525,6 @@ class Assistant(Agent):
             logger.error(f"Error in send_email_tool: {str(e)}", exc_info=True)
             return f"error: {str(e)}"
     
-    @function_tool
-    async def knowledge_base_search(self, query: str) -> str:
-        """
-        Search the knowledge base for detailed information about technical topics, products, services, or company information.
-        
-        Use this tool when the user asks about:
-        - Technical topics (e.g., "What is langchain?", "How does langgraph work?", "Explain MCP servers")
-        - Product details, features, or specifications
-        - Company information, policies, or procedures
-        - Any specific information that requires looking up documentation
-        - Comparisons or detailed explanations
-        
-        DO NOT use this for:
-        - General conversation or greetings
-        - Simple yes/no questions you can answer directly
-        - Personal opinions or subjective matters
-        
-        Always say "Let me check that for you" before calling this function.
-        
-        Args:
-            query: The user's question to search for (e.g., "What is langchain and how does it work?")
-        
-        Returns:
-            Relevant information from the knowledge base
-        """
-        logger.info(f"Knowledge base search requested for query: {query}")
-        
-        # Acknowledgment message that agent will speak
-        acknowledgment = "Let me check that for you. "
-        
-        # Check if RAG service is available
-        if not self.rag_service:
-            logger.error("RAG service not initialized")
-            return acknowledgment + "I'm sorry, the knowledge base is not available right now."
-        
-        try:
-            # Use configured collection_names or search all if not specified
-            collections = self.collection_names if self.collection_names else None
-            
-            if collections:
-                logger.info(f"Searching in collections: {collections}")
-            else:
-                logger.info("Searching across ALL documents in main_collection (no collection filter)")
-            
-            # Perform search with configured collections or all documents
-            search_results = self.rag_service.retrieval_based_search(
-                query=query,
-                collections=collections,
-                top_k=1
-            )
-            
-            # Format results into a readable answer
-            if not search_results:
-                return acknowledgment + "I couldn't find any relevant information in the knowledge base."
-            
-            # Extract and combine text from top results
-            relevant_texts = [result['text'] for result in search_results]
-            combined_context = " ".join(relevant_texts[:2])  # Use top 2 results
-            
-            logger.info(f"Found {len(search_results)} results from collections: {[r.get('collection') for r in search_results]}")
-            
-            # Return acknowledgment + context for the agent to synthesize an answer
-            return acknowledgment + f"Based on the knowledge base: {combined_context}"
-            
-        except Exception as e:
-            logger.error(f"Error in knowledge base search: {e}", exc_info=True)
-            return acknowledgment + "I'm sorry, I encountered an error while searching the knowledge base."
-
 
 # ------------------------------------------------------------
 # Agent entrypoint
