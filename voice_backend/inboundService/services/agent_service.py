@@ -381,6 +381,8 @@ async def entrypoint(ctx: agents.JobContext):
                 logger.info(f"  - collections: {agent_config.get('collections', 'N/A')}")
                 logger.info(f"  - agent_instruction length: {len(agent_config.get('agent_instruction', ''))} chars")
                 logger.info(f"  - agent_instruction preview: {agent_config.get('agent_instruction', 'N/A')[:100]}...")
+                if agent_config.get('greeting_message'):
+                    logger.info(f"  - greeting_message: {agent_config.get('greeting_message')}")
             else:
                 logger.warning(f"No agent config found for called number {called_number_formatted}")
                 logger.info(f"💡 TIP: Create a document in 'inbound-agent-config' collection with:")

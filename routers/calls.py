@@ -67,6 +67,7 @@ async def outbound_call(request: OutboundCallRequest):
             - provider: LLM provider ("openai" or "gemini", default: "openai")
             - api_key: Custom API key for the provider (optional)
             - collection_names: List of RAG collections to search (optional)
+            - greeting_message: Custom greeting message for the call (optional)
         
     Returns:
         StatusResponse with call status and caller_id (room name)
@@ -77,6 +78,14 @@ async def outbound_call(request: OutboundCallRequest):
             "phone_number": "+1234567890",
             "name": "John Doe",
             "dynamic_instruction": "Ask about appointment"
+        }
+        
+        With custom greeting:
+        {
+            "phone_number": "+1234567890",
+            "name": "John Doe",
+            "dynamic_instruction": "Ask about appointment",
+            "greeting_message": "Hello John, this is Sarah from ABC Clinic calling to confirm your appointment."
         }
         
         With RAG collections:
@@ -155,6 +164,8 @@ async def outbound_call(request: OutboundCallRequest):
                 update_doc["collection_names"] = collection_names_param
             if request.organisation_id:
                 update_doc["organisation_id"] = request.organisation_id
+            if request.greeting_message:
+                update_doc["greeting_message"] = request.greeting_message
             
             # Update the single document (upsert if it doesn't exist)
             result = collection.update_one(
@@ -185,6 +196,8 @@ async def outbound_call(request: OutboundCallRequest):
                 log_info(f"  - Organisation ID: {request.organisation_id}")
             if request.contact_number:
                 log_info(f"  - Contact Number: {request.contact_number}")
+            if request.greeting_message:
+                log_info(f"  - Greeting Message: {request.greeting_message}")
                 
         except Exception as e:
             log_error(f"Failed to update MongoDB configuration: {str(e)}")

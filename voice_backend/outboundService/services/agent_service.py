@@ -548,6 +548,7 @@ async def entrypoint(ctx: agents.JobContext):
         provider = dynamic_config.get("provider", "openai").lower()
         api_key = dynamic_config.get("api_key")
         collection_names = dynamic_config.get("collection_names")  # List of collections to search in RAG
+        greeting_message = dynamic_config.get("greeting_message")  # Custom greeting message
 
         # Build full instructions with escalation condition if provided
         if escalation_condition:
@@ -599,6 +600,8 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info(f"  - Agent Instructions: {dynamic_instruction[:100]}...")
         if escalation_condition:
             logger.info(f"  - Escalation Condition: {escalation_condition}")
+        if greeting_message:
+            logger.info(f"  - Custom Greeting Message: {greeting_message}")
         
         # Log full instructions to see what AI knows (first 500 chars)
         logger.info(f"  - Full Instructions Preview: {instructions[:500]}...")
@@ -626,6 +629,7 @@ async def entrypoint(ctx: agents.JobContext):
         provider = "openai"
         api_key = None
         collection_names = None  # Default: search all collections
+        greeting_message = None  # No custom greeting
     
     # Static config from environment
     room_prefix_for_cleanup = os.getenv("ROOM_CLEANUP_PREFIX", "agent-room")
@@ -995,18 +999,24 @@ async def entrypoint(ctx: agents.JobContext):
     # --------------------------------------------------------
     # await asyncio.sleep(2)  # Let audio streams stabilize
 
-    # Multi-language greeting support
-    greetings = {
-        "en": f"Hello {caller_name}, I'm your Assistant from Aistein.",
-        "it": f"Ciao {caller_name}, sono il tuo Assistente di Aistein.",
-        "es": f"Hola {caller_name}, soy tu Asistente de Aistein.",
-        "ar": f"مرحبا {caller_name}، أنا مساعدك من Aistein.",
-        "tr": f"Merhaba {caller_name}, ben Aistein'dan Asistanınızım.",
-        "hi": f"नमस्ते {caller_name}, मैं Aistein से आपका सहायक हूँ।"
-    }
-    
-    # Default to English if language not supported
-    greeting_instruction = greetings.get(language, greetings["en"])
+    # Use custom greeting message if provided, otherwise use default multi-language greetings
+    if greeting_message:
+        greeting_instruction = greeting_message
+        logger.info(f"Using custom greeting message from config")
+    else:
+        # Multi-language greeting support (fallback)
+        greetings = {
+            "en": f"Hello {caller_name}, I'm your Assistant from Aistein.",
+            "it": f"Ciao {caller_name}, sono il tuo Assistente di Aistein.",
+            "es": f"Hola {caller_name}, soy tu Asistente de Aistein.",
+            "ar": f"مرحبا {caller_name}، أنا مساعدك من Aistein.",
+            "tr": f"Merhaba {caller_name}, ben Aistein'dan Asistanınızım.",
+            "hi": f"नमस्ते {caller_name}, मैं Aistein से आपका सहायक हूँ।"
+        }
+        
+        # Default to English if language not supported
+        greeting_instruction = greetings.get(language, greetings["en"])
+        logger.info(f"Using default greeting for language: {language}")
     try:
         # Guard that session is running (some SDKs expose is_running)
         is_running = getattr(session, "is_running", None)
