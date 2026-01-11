@@ -225,10 +225,10 @@ class Assistant(Agent):
 
 # --- Main Entrypoint ---
 
-async def request_fnc(req: JobRequest) -> None:
-    """Auto-accept job requests."""
-    logger.info(f"Accepting job for room: {req.room.name}")
-    await req.accept(entrypoint_fnc=entrypoint)
+# async def request_fnc(req: JobRequest) -> None:
+#     """Auto-accept job requests."""
+#     logger.info(f"Accepting job for room: {req.room.name}")
+#     await req.accept()
 
 async def entrypoint(ctx: agents.JobContext):
     logger.info(f"Starting inbound entrypoint for room: {ctx.room.name}")
@@ -331,54 +331,27 @@ async def entrypoint(ctx: agents.JobContext):
         Stop the egress recording while the connection is still active.
         This runs BEFORE the main cleanup to ensure API is still available.
         """
-        nonlocal egress_id, gcs_bucket
+        nonlocal egress_id
         if not egress_id:
-            logger.info("No active recording to stop (egress_id not set)")
             return
             
         try:
-            logger.info(f"Stopping egress recording: {egress_id}")
-            
-            # Try to use existing ctx.api first
-            try:
-                await ctx.api.egress.stop_egress(
-                    api.StopEgressRequest(egress_id=egress_id)
-                )
-                logger.info(f"✓ Recording stopped successfully - Egress ID: {egress_id}")
-                if gcs_bucket:
-                    logger.info(f"✓ Recording saved to: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg")
+            # Fetch the current status first to avoid stopping a failed egress
+            egress_info = await ctx.api.egress.list_egress(api.ListEgressRequest(egress_id=egress_id))
+            if not egress_info or len(egress_info.items) == 0:
                 return
-            except Exception as ctx_error:
-                logger.warning(f"Failed to stop egress via ctx.api: {ctx_error}")
-                logger.info("Attempting with fresh API client...")
+
+            status = egress_info.items[0].status
+            # Only attempt to stop if it's active or starting
+            if status in [api.EgressStatus.EGRESS_STARTING, api.EgressStatus.EGRESS_ACTIVE]:
+                await ctx.api.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
+                logger.info(f"Recording stopped successfully: {egress_id}")
+            else:
+                logger.warning(f"Egress {egress_id} is in state {status}, skipping stop request.")
                 
-                # Fallback: Create a fresh API client if ctx.api is unavailable
-                if LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET:
-                    try:
-                        fresh_api = api.LiveKitAPI(
-                            url=LIVEKIT_URL,
-                            api_key=LIVEKIT_API_KEY,
-                            api_secret=LIVEKIT_API_SECRET
-                        )
-                        await fresh_api.egress.stop_egress(
-                            api.StopEgressRequest(egress_id=egress_id)
-                        )
-                        await fresh_api.aclose()
-                        logger.info(f"✓ Recording stopped successfully (fresh client) - Egress ID: {egress_id}")
-                        if gcs_bucket:
-                            logger.info(f"✓ Recording saved to: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg")
-                        return
-                    except Exception as fresh_error:
-                        logger.error(f"Failed to stop egress with fresh client: {fresh_error}")
-                        raise
-                else:
-                    logger.error("Cannot create fresh API client - credentials not available")
-                    raise ctx_error
-                    
-        except Exception as egress_error:
-            logger.error(f"All attempts to stop egress failed: {egress_error}", exc_info=True)
-            logger.info("Note: Recording will still finalize automatically when room closes")
-            logger.info(f"Check GCS bucket for: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg" if gcs_bucket else "Check GCS bucket for recording")
+        except Exception as e:
+            logger.error(f"Error during egress cleanup: {e}")
+
     
 
     async def cleanup_and_save():
@@ -438,7 +411,7 @@ async def entrypoint(ctx: agents.JobContext):
 def run_agent():
     worker_options = agents.WorkerOptions(
         entrypoint_fnc=entrypoint,
-        request_fnc=request_fnc,
+        # request_fnc=request_fnc,
         agent_name="inbound-agent"
     )
     agents.cli.run_app(worker_options)

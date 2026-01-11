@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hover Video Card</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .card-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .hover-card {
+            width: 350px;
+            height: 450px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            position: relative;
+        }
+
+        .hover-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-thumbnail {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: opacity 0.3s ease;
+        }
+
+        .card-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .hover-card:hover .card-iframe {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .hover-card:hover .card-thumbnail {
+            opacity: 0;
+        }
+
+        .hover-card:hover .card-video {
+            opacity: 1;
+        }
+
+        .card-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+            color: white;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .hover-card:hover .card-info {
+            transform: translateY(0);
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .card-description {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .play-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            opacity: 0.8;
+        }
+
+        .hover-card:hover .play-icon {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(1.5);
+        }
+
+        .play-icon::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 20px solid #667eea;
+            border-top: 12px solid transparent;
+            border-bottom: 12px solid transparent;
+            margin-left: 5px;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 50px;
+            font-size: 48px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .main-wrapper {
+            text-align: center;
+        }
+
+        .loading {
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .error {
+            color: #ff6b6b;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>🔥 Trending TikTok Videos</h1>
+        
+        <div class="card-container" id="videos-container">
+            <div class="loading">Loading trending videos...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+        const videosContainer = document.getElementById('videos-container');
+
+        // Fetch trending videos from backend
+        async function loadTrendingVideos() {
+            try {
+                const response = await fetch(`${API_URL}/api/trending`);
+                const data = await response.json();
+                
+                if (data.videos && data.videos.length > 0) {
+                    displayVideos(data.videos);
+                } else {
+                    videosContainer.innerHTML = '<div class="error">No trending videos found</div>';
+                }
+            } catch (error) {
+                console.error('Error loading videos:', error);
+                videosContainer.innerHTML = '<div class="error">Error loading videos. Make sure the Flask server is running!</div>';
+            }
+        }
+
+        // Display videos as cards
+        function displayVideos(videos) {
+            videosContainer.innerHTML = '';
+            
+            videos.forEach(video => {
+                const card = createVideoCard(video);
+                videosContainer.appendChild(card);
+            });
+            
+            // Add hover event listeners
+            setupHoverEvents();
+        }
+
+        // Create a video card element
+        function createVideoCard(video) {
+            const card = document.createElement('div');
+            card.className = 'hover-card';
+            
+            card.innerHTML = `
+                <img src="${video.thumbnail}" 
+                     alt="${video.title}" 
+                     class="card-thumbnail">
+                
+                <video class="card-video" loop muted playsinline preload="metadata">
+                    <source src="${API_URL}/api/proxy-video?url=${encodeURIComponent(video.video_url)}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                
+                <div class="play-icon"></div>
+                
+                <div class="card-info">
+                    <div class="card-title">${video.author}</div>
+                    <div class="card-description">${video.title || 'Hover to preview'}</div>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Setup hover events for all cards
+        function setupHoverEvents() {
+            const cards = document.querySelectorAll('.hover-card');
+            
+            cards.forEach(card => {
+                const video = card.querySelector('.card-video');
+                
+                // Play video on hover
+                card.addEventListener('mouseenter', () => {
+                    if (video) {
+                        video.play().catch(err => {
+                            console.log('Video play failed:', err);
+                        });
+                    }
+                });
+                
+                // Pause video when hover ends
+                card.addEventListener('mouseleave', () => {
+                    if (video) {
+                        video.pause();
+                        video.currentTime = 0; // Reset to beginning
+                    }
+                });
+            });
+        }
+
+        // Load videos on page load
+        loadTrendingVideos();
+    </script>
+</body>
+</html>
+
