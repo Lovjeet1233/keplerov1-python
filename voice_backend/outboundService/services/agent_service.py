@@ -258,6 +258,10 @@ async def entrypoint(ctx: agents.JobContext):
     # 1. Parallelize Config & Tools Loading
     config_task = asyncio.create_task(load_dynamic_config_async())
     tools_task = asyncio.create_task(load_registered_tools_async())
+
+    # 5. Wait for Config
+    dynamic_config = await config_task
+    await tools_task
     
     # 2. Initialize STT (Deepgram Nova-2)
     stt_instance = deepgram.STT(model="nova-2-phonecall", language="en")
@@ -273,10 +277,6 @@ async def entrypoint(ctx: agents.JobContext):
 
     # 4. Initialize LLM (GPT-4o-mini)
     llm_instance = google.LLM(model="gemini-2.5-flash")
-
-    # 5. Wait for Config
-    dynamic_config = await config_task
-    await tools_task
     
     # 6. Configure Session with Aggressive VAD
     session = AgentSession(
