@@ -274,10 +274,10 @@ async def entrypoint(ctx: agents.JobContext):
     # )
     # 3. Initialize TTS (Cartesia Sonic-3)
     tts_instance = cartesia.TTS(
-        api_key=os.getenv("CARTESIA_API_KEY"),
+        api_key="sk_car_5TjKemDoHphETZp64Tpv1Z",
         model='sonic-3',
         language=agent_config.get('language', 'en'),
-        voice=agent_config.get('voice_id', "2EiwWnXFnvU5JabPnv8n"),
+        voice=agent_config.get('voice_id', "f786b574-daa5-4673-aa0c-cbe3e8534c02"),
         speed=1.1
     )
 
