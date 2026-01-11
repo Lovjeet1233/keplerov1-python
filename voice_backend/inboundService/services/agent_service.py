@@ -327,16 +327,59 @@ async def entrypoint(ctx: agents.JobContext):
             logger.error(f"Failed to start recording: {e}")
 
     async def stop_recording():
-        """Explicitly stop the egress recording."""
-        nonlocal egress_id
+        """
+        Stop the egress recording while the connection is still active.
+        This runs BEFORE the main cleanup to ensure API is still available.
+        """
+        nonlocal egress_id, gcs_bucket
         if not egress_id:
+            logger.info("No active recording to stop (egress_id not set)")
             return
+            
         try:
-            logger.info(f"Stopping recording: {egress_id}")
-            await ctx.api.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
-            logger.info(f"Recording stopped successfully: {egress_id}")
-        except Exception as e:
-            logger.error(f"Failed to stop recording: {e}")
+            logger.info(f"Stopping egress recording: {egress_id}")
+            
+            # Try to use existing ctx.api first
+            try:
+                await ctx.api.egress.stop_egress(
+                    api.StopEgressRequest(egress_id=egress_id)
+                )
+                logger.info(f"✓ Recording stopped successfully - Egress ID: {egress_id}")
+                if gcs_bucket:
+                    logger.info(f"✓ Recording saved to: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg")
+                return
+            except Exception as ctx_error:
+                logger.warning(f"Failed to stop egress via ctx.api: {ctx_error}")
+                logger.info("Attempting with fresh API client...")
+                
+                # Fallback: Create a fresh API client if ctx.api is unavailable
+                if LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET:
+                    try:
+                        fresh_api = api.LiveKitAPI(
+                            url=LIVEKIT_URL,
+                            api_key=LIVEKIT_API_KEY,
+                            api_secret=LIVEKIT_API_SECRET
+                        )
+                        await fresh_api.egress.stop_egress(
+                            api.StopEgressRequest(egress_id=egress_id)
+                        )
+                        await fresh_api.aclose()
+                        logger.info(f"✓ Recording stopped successfully (fresh client) - Egress ID: {egress_id}")
+                        if gcs_bucket:
+                            logger.info(f"✓ Recording saved to: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg")
+                        return
+                    except Exception as fresh_error:
+                        logger.error(f"Failed to stop egress with fresh client: {fresh_error}")
+                        raise
+                else:
+                    logger.error("Cannot create fresh API client - credentials not available")
+                    raise ctx_error
+                    
+        except Exception as egress_error:
+            logger.error(f"All attempts to stop egress failed: {egress_error}", exc_info=True)
+            logger.info("Note: Recording will still finalize automatically when room closes")
+            logger.info(f"Check GCS bucket for: gs://{gcs_bucket}/calls/{ctx.room.name}.ogg" if gcs_bucket else "Check GCS bucket for recording")
+    
 
     async def cleanup_and_save():
         """Final cleanup: Stop recording and save transcript."""
