@@ -63,10 +63,13 @@ class RAGWorkflow:
         self.rag_service = rag_service
         self.memory_enabled = memory_enabled
         self.llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
-            temperature=0.7,
+            model="gpt-4o-mini",  # Faster and cheaper than gpt-4.1-mini
+            temperature=0.3,
             openai_api_key=openai_api_key
         )
+        
+        # OPTIMIZATION: Cache LLM instances to avoid re-initialization overhead
+        self.llm_cache = {}  # key: (provider, api_key_hash) -> value: LLM instance
         
         # Initialize MongoDB checkpointer if memory is enabled
         self.memory = None
@@ -93,6 +96,55 @@ class RAGWorkflow:
             log_info("RAG Workflow initialized with MongoDB checkpointer enabled")
         else:
             log_info("RAG Workflow initialized without memory checkpointing")
+    
+    def _get_cached_llm(self, provider: str, api_key: Optional[str] = None):
+        """
+        Get or create a cached LLM instance to avoid re-initialization overhead.
+        
+        Args:
+            provider: LLM provider ("openai" or "gemini")
+            api_key: Optional API key for the provider
+            
+        Returns:
+            Cached or newly created LLM instance
+        """
+        # Create cache key
+        cache_key = (provider.lower(), api_key[:20] if api_key else "default")
+        
+        # Return cached instance if exists
+        if cache_key in self.llm_cache:
+            log_debug(f"Using cached LLM instance for {provider}")
+            return self.llm_cache[cache_key]
+        
+        # Create new LLM instance
+        log_info(f"Creating new LLM instance for {provider}")
+        
+        if provider.lower() == "gemini":
+            if not api_key:
+                raise ValueError("Gemini provider requires an API key")
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-pro",
+                temperature=0.3,
+                google_api_key=api_key
+            )
+        else:  # default to OpenAI
+            if api_key:
+                llm = ChatOpenAI(
+                    model="gpt-4o-mini",
+                    temperature=0.3,
+                    openai_api_key=api_key
+                )
+            else:
+                llm = self.llm  # Use default configured LLM
+        
+        # Cache the instance
+        self.llm_cache[cache_key] = llm
+        return llm
+    
+    def clear_llm_cache(self):
+        """Clear the LLM cache (useful if API keys change or memory needs to be freed)"""
+        self.llm_cache.clear()
+        log_info("LLM cache cleared")
     
     def _build_graph(self) -> StateGraph:
         """
@@ -193,43 +245,28 @@ class RAGWorkflow:
         try:
             log_info("Generating answer based on retrieved context and conversation history")
             
-            # Select LLM based on provider and API key from state
+            # OPTIMIZATION: Use cached LLM instance to avoid re-initialization overhead
             provider = state.get("provider", "openai").lower()
             api_key = state.get("api_key")
             
-            # Create LLM instance based on provider
-            if provider == "gemini":
-                if api_key:
-                    llm = ChatGoogleGenerativeAI(
-                        model="gemini-2.5-pro",
-                        temperature=0.7,
-                        google_api_key=api_key
-                    )
-                    log_info("Using Gemini (with custom API key)")
-                else:
-                    log_error("Gemini provider selected but no API key provided")
-                    state["answer"] = "Error: Gemini provider requires an API key."
-                    return state
-            else:  # default to OpenAI
-                if api_key:
-                    llm = ChatOpenAI(
-                        model="gpt-4.1-mini",
-                        temperature=0.7,
-                        openai_api_key=api_key
-                    )
-                    log_info("Using OpenAI with custom API key")
-                else:
-                    llm = self.llm  # Use default configured LLM
-                    log_info("Using default OpenAI configuration")
+            try:
+                llm = self._get_cached_llm(provider, api_key)
+                log_info(f"Using {provider} LLM (cached: {(provider, api_key[:20] if api_key else 'default') in self.llm_cache})")
+            except ValueError as e:
+                log_error(f"Error getting LLM: {str(e)}")
+                state["answer"] = f"Error: {str(e)}"
+                return state
             
-            # Build conversation history context
+            # Build conversation history context (OPTIMIZED: minimal format)
             history_context = ""
             if state.get("conversation_history"):
                 history_items = []
-                for item in state["conversation_history"][-3:]:  # Last 3 turns
-                    history_items.append(f"User: {item['query']}\nAssistant: {item['answer']}")
+                for item in state["conversation_history"][-2:]:  # Last 2 turns only
+                    # Truncate long answers to save tokens (150 chars max)
+                    answer_preview = item['answer'][:150] + "..." if len(item['answer']) > 150 else item['answer']
+                    history_items.append(f"Q: {item['query']}\nA: {answer_preview}")
                 if history_items:
-                    history_context = "\n\nPrevious conversation:\n" + "\n\n".join(history_items)
+                    history_context = "\n\nHistory:\n" + "\n".join(history_items)
             
             # Check if we have context from retrieval
             has_retrieval_context = (
@@ -245,8 +282,13 @@ class RAGWorkflow:
             
             if has_retrieval_context:
                 # Use RAG template with retrieved context
+                # OPTIMIZATION: Truncate context if too long (save tokens = faster generation)
+                context_text = state["context"]
+                if len(context_text) > 3000:  # Limit context to ~3000 chars
+                    context_text = context_text[:3000] + "\n...(context truncated for speed)"
+                
                 prompt = RAG_PROMPT_TEMPLATE.format(
-                    context=state["context"],
+                    context=context_text,
                     question=state["query"]
                 )
                 if history_context:
@@ -293,7 +335,8 @@ class RAGWorkflow:
         thread_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
         provider: Optional[str] = "openai",
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
+        skip_history: bool = False
     ) -> dict:
         """
         Run the RAG workflow with conversation memory.
@@ -308,6 +351,7 @@ class RAGWorkflow:
             system_prompt: Optional custom system prompt (uses default if not provided)
             provider: LLM provider to use ("openai" or "gemini", default: "openai")
             api_key: Optional API key for the provider
+            skip_history: Skip conversation history lookup for faster responses (default: False)
             
         Returns:
             Dictionary with answer and retrieved documents
@@ -329,18 +373,21 @@ class RAGWorkflow:
                 }
             }
             
-            # Retrieve conversation history from checkpointer
+            # OPTIMIZATION: Retrieve conversation history from checkpointer (optional for performance)
             conversation_history = []
-            try:
-                # Get the latest state from checkpointer for this thread
-                state_snapshot = self.graph.get_state(config)
-                if state_snapshot and hasattr(state_snapshot, 'values') and state_snapshot.values:
-                    existing_history = state_snapshot.values.get("conversation_history", [])
-                    if existing_history:
-                        conversation_history = existing_history
-                        log_info(f"Retrieved {len(conversation_history)} previous conversation turns")
-            except Exception as e:
-                log_debug(f"No previous conversation history found or error retrieving: {str(e)}")
+            if not skip_history:
+                try:
+                    # Get the latest state from checkpointer for this thread
+                    state_snapshot = self.graph.get_state(config)
+                    if state_snapshot and hasattr(state_snapshot, 'values') and state_snapshot.values:
+                        existing_history = state_snapshot.values.get("conversation_history", [])
+                        if existing_history:
+                            conversation_history = existing_history
+                            log_info(f"Retrieved {len(conversation_history)} previous conversation turns")
+                except Exception as e:
+                    log_debug(f"No previous conversation history found or error retrieving: {str(e)}")
+            else:
+                log_info("Skipping conversation history lookup for faster response")
             
             # Initialize state with conversation history
             initial_state = {

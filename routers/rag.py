@@ -5,6 +5,8 @@ RAG-related API endpoints
 import os
 import tempfile
 import shutil
+import asyncio
+import time
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 from utils.logger import log_info, log_error, log_exception
@@ -34,6 +36,56 @@ def init_rag_router(service, workflow, mongo_manager):
     mongodb_manager = mongo_manager
 
 
+# OPTIMIZATION: Async helper functions for non-blocking MongoDB operations
+async def _manage_chatbot_instance_async(mongodb_manager, instance_id: str, request, collections):
+    """Background task to manage chatbot instance - non-blocking"""
+    try:
+        existing_instance = mongodb_manager.get_chatbot_instance(instance_id)
+        if not existing_instance:
+            collection_info = request.collection_name or (
+                ",".join(collections) if collections else "all"
+            )
+            mongodb_manager.create_chatbot_instance(
+                instance_id=instance_id,
+                collection_name=collection_info,
+                metadata={
+                    "top_k": request.top_k,
+                    "created_via": "chat_endpoint",
+                    "collections": collections if collections else "all"
+                }
+            )
+            log_info(f"Created new chatbot instance: {instance_id}")
+        else:
+            mongodb_manager.update_chatbot_instance(
+                instance_id=instance_id,
+                update_data={"last_used": "now"}
+            )
+    except Exception as e:
+        log_error(f"Error managing chatbot instance (background): {str(e)}")
+
+
+async def _store_chat_message_async(mongodb_manager, thread_id: str, instance_id: str, 
+                                    query: str, answer: str, retrieved_docs: list,
+                                    collection_name: str, collections: list, top_k: int):
+    """Background task to store chat message - non-blocking"""
+    try:
+        mongodb_manager.store_chat_message(
+            thread_id=thread_id,
+            instance_id=instance_id,
+            query=query,
+            answer=answer,
+            retrieved_docs=retrieved_docs,
+            metadata={
+                "collection_name": collection_name,
+                "collection_names": collections,
+                "top_k": top_k
+            }
+        )
+        log_info(f"Stored chat message in MongoDB for thread: {thread_id}")
+    except Exception as e:
+        log_error(f"Error storing chat message (background): {str(e)}")
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
@@ -55,7 +107,7 @@ async def chat(request: ChatRequest):
             - api_key: Custom API key for the provider (optional, uses default if not provided)
         
     Returns:
-        ChatResponse with generated answer and retrieved documents
+        ChatResponse with generated answer, retrieved documents, and latency_ms
         
     Examples:
         Single collection (backward compatible):
@@ -73,6 +125,9 @@ async def chat(request: ChatRequest):
             "top_k": 10
         }
     """
+    # Start timing
+    start_time = time.time()
+    
     try:
         # Get collections list (supports both old and new format)
         collections = request.get_collections()
@@ -87,40 +142,17 @@ async def chat(request: ChatRequest):
         # Use thread_id as instance_id (or generate a default one)
         instance_id = request.thread_id if request.thread_id else "default"
         
-        # Create or get chatbot instance in MongoDB
-        try:
-            existing_instance = mongodb_manager.get_chatbot_instance(instance_id)
-            if not existing_instance:
-                # Store collection info for metadata
-                collection_info = request.collection_name or (
-                    ",".join(collections) if collections else "all"
-                )
-                mongodb_manager.create_chatbot_instance(
-                    instance_id=instance_id,
-                    collection_name=collection_info,
-                    metadata={
-                        "top_k": request.top_k,
-                        "created_via": "chat_endpoint",
-                        "collections": collections if collections else "all"
-                    }
-                )
-                log_info(f"Created new chatbot instance: {instance_id}")
-            else:
-                # Update the instance's last used time
-                mongodb_manager.update_chatbot_instance(
-                    instance_id=instance_id,
-                    update_data={"last_used": "now"}
-                )
-        except Exception as e:
-            log_error(f"Error managing chatbot instance: {str(e)}")
-            # Continue even if instance management fails
+        # OPTIMIZATION: MongoDB instance management in background (non-blocking)
+        asyncio.create_task(_manage_chatbot_instance_async(mongodb_manager, instance_id, request, collections))
         
         # Run the RAG workflow (retrieve + generate) with multiple collections support
-        log_info(f"Using provider: {request.provider}, Custom API key provided: {bool(request.api_key)}")
+        log_info(f"Using provider: {request.provider}, Custom API key provided: {bool(request.api_key)}, Elaborate: {request.elaborate}, Skip history: {request.skip_history}")
         
-        # Add elaboration instruction to system prompt
-        elaboration_instruction = "\n\nIMPORTANT: Provide detailed, elaborate responses with comprehensive explanations. Continue elaborating until the user explicitly says 'don't elaborate' or asks for shorter responses."
-        enhanced_system_prompt = (request.system_prompt or "") + elaboration_instruction
+        # Add elaboration instruction to system prompt if requested
+        enhanced_system_prompt = request.system_prompt or ""
+        if request.elaborate:
+            elaboration_instruction = "\n\nIMPORTANT: Provide detailed, elaborate responses with comprehensive explanations. Continue elaborating until the user explicitly says 'don't elaborate' or asks for shorter responses."
+            enhanced_system_prompt += elaboration_instruction
         
         result = rag_workflow.run(
             query=request.query,
@@ -130,37 +162,37 @@ async def chat(request: ChatRequest):
             thread_id=request.thread_id,
             system_prompt=enhanced_system_prompt,
             provider=request.provider,
-            api_key=request.api_key
+            api_key=request.api_key,
+            skip_history=request.skip_history  # Skip history for faster responses
         )
         
         collection_count = len(collections) if collections else "all"
         log_info(f"Workflow completed - Retrieved {len(result['retrieved_docs'])} documents from {collection_count} collection(s)")
         
-        # Store chat message in MongoDB
-        try:
-            mongodb_manager.store_chat_message(
-                thread_id=result.get("thread_id", "default"),
-                instance_id=instance_id,
-                query=request.query,
-                answer=result["answer"],
-                retrieved_docs=result["retrieved_docs"],
-                metadata={
-                    "collection_name": request.collection_name,
-                    "collection_names": collections,
-                    "top_k": request.top_k
-                }
-            )
-            log_info(f"Stored chat message in MongoDB for thread: {result.get('thread_id')}")
-        except Exception as e:
-            log_error(f"Error storing chat message: {str(e)}")
-            # Continue even if storage fails
+        # OPTIMIZATION: Store chat message in background (non-blocking)
+        asyncio.create_task(_store_chat_message_async(
+            mongodb_manager, 
+            result.get("thread_id", "default"),
+            instance_id,
+            request.query,
+            result["answer"],
+            result["retrieved_docs"],
+            request.collection_name,
+            collections,
+            request.top_k
+        ))
+        
+        # Calculate latency in milliseconds
+        latency_ms = (time.time() - start_time) * 1000
+        log_info(f"Request completed in {latency_ms:.2f}ms")
         
         return ChatResponse(
             query=request.query,
             answer=result["answer"],
             retrieved_docs=result["retrieved_docs"],
             context=result.get("context"),
-            thread_id=result.get("thread_id")
+            thread_id=result.get("thread_id"),
+            latency_ms=latency_ms
         )
     
     except Exception as e:

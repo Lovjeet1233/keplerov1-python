@@ -33,6 +33,8 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None
     provider: Optional[str] = "openai"  # "openai" or "gemini"
     api_key: Optional[str] = None  # Custom API key for the provider
+    elaborate: Optional[bool] = False  # Request detailed/elaborate responses (increases latency)
+    skip_history: Optional[bool] = False  # Skip conversation history for faster responses
     
     def get_collections(self) -> list[str]:
         """Get list of collections, supporting both single and multiple collection names."""
@@ -51,6 +53,7 @@ class ChatResponse(BaseModel):
     retrieved_docs: list
     context: Optional[str] = None
     thread_id: Optional[str] = None
+    latency_ms: Optional[float] = None  # Response time in milliseconds
 
 
 class DataIngestionRequest(BaseModel):

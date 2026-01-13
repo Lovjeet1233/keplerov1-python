@@ -76,10 +76,19 @@ def get_async_mongo_client():
     return _mongo_client
 
 # --- Logging ---
+# Create logs directory if it doesn't exist
+logs_dir = project_root / "logs"
+logs_dir.mkdir(exist_ok=True)
+
+# Setup logging with both file and console output
+log_filename = logs_dir / f"outbound-call-log_{datetime.now().strftime('%Y%m%d')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_filename, mode='a', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger("optimized_agent")
 

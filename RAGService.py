@@ -12,6 +12,8 @@ import pickle
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from functools import lru_cache
+import hashlib
 
 
 class RAGService:
@@ -83,6 +85,50 @@ class RAGService:
             print(f"✓ Saved FAISS index with {len(self.metadata)} vectors")
         except Exception as e:
             print(f"Error saving index: {e}")
+    
+    def _get_query_cache_key(self, query: str) -> str:
+        """Generate cache key for query embedding"""
+        return hashlib.md5(query.encode()).hexdigest()
+    
+    @lru_cache(maxsize=1000)
+    def _cached_embed_query(self, query_hash: str, query: str) -> tuple:
+        """
+        Cache query embeddings to avoid recomputation.
+        Uses LRU cache with 1000 most recent queries.
+        
+        Args:
+            query_hash: Hash of the query for cache key
+            query: The actual query text
+            
+        Returns:
+            Tuple of embedding values (hashable for caching)
+        """
+        embedding = self.embeddings.embed_query(query)
+        return tuple(embedding)  # Convert to tuple for caching
+    
+    def embed_texts_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
+        """
+        Embed multiple texts in batches for better performance.
+        Uses OpenAI's batch embedding API which is more efficient than individual calls.
+        
+        Args:
+            texts: List of texts to embed
+            batch_size: Number of texts to embed in each batch
+            
+        Returns:
+            List of embeddings
+        """
+        all_embeddings = []
+        
+        # Process in batches
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            # Use OpenAI's batch embedding (more efficient than individual calls)
+            batch_embeddings = self.embeddings.embed_documents(batch)
+            all_embeddings.extend(batch_embeddings)
+            print(f"✓ Embedded batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1} ({len(batch)} texts)")
+        
+        return all_embeddings
     
     def data_ingestion_pdf(self, pdf_path: str) -> str:
         """Extract text from PDF files using pdfplumber."""
@@ -233,7 +279,7 @@ class RAGService:
             texts = await asyncio.gather(*tasks, return_exceptions=True)
             
             all_chunks = []
-            all_embeddings = []
+            all_chunk_texts = []  # For batch embedding
             successful_sources = []
             failed_sources = []
             
@@ -245,10 +291,9 @@ class RAGService:
                 
                 chunks = self.text_splitter.split_text(text)
                 
-                # Generate embeddings for these chunks
+                # Store chunks for batch embedding
                 for chunk in chunks:
-                    embedding = self.embeddings.embed_query(chunk)
-                    all_embeddings.append(embedding)
+                    all_chunk_texts.append(chunk)
                     all_chunks.append({
                         "text": chunk,
                         "collection": collection_name,
@@ -260,6 +305,10 @@ class RAGService:
             
             if not all_chunks:
                 raise Exception("No data extracted from any source")
+            
+            # OPTIMIZATION: Batch embed all chunks at once (much faster!)
+            print(f"Generating embeddings for {len(all_chunk_texts)} chunks in batches...")
+            all_embeddings = self.embed_texts_batch(all_chunk_texts, batch_size=100)
             
             # Convert to numpy array and normalize
             vectors = np.array(all_embeddings, dtype=np.float32)
@@ -316,7 +365,7 @@ class RAGService:
         top_k: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Search for relevant documents using FAISS.
+        Search for relevant documents using FAISS with query caching.
         
         Args:
             query: Search query
@@ -331,8 +380,9 @@ class RAGService:
                 print("Warning: Index is empty")
                 return []
             
-            # Generate query embedding
-            query_embedding = self.embeddings.embed_query(query)
+            # OPTIMIZATION: Use cached embedding for repeated queries
+            query_hash = self._get_query_cache_key(query)
+            query_embedding = list(self._cached_embed_query(query_hash, query))
             query_vector = np.array([query_embedding], dtype=np.float32)
             faiss.normalize_L2(query_vector)
             
