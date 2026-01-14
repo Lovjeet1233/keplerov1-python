@@ -3,8 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hover Video Card</title>
+    <title>Keplero - Messenger Integration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a26;
+            --accent-primary: #00d4aa;
+            --accent-secondary: #0066ff;
+            --accent-gradient: linear-gradient(135deg, #00d4aa 0%, #0066ff 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #8b8b9e;
+            --text-muted: #5a5a6e;
+            --border-color: #2a2a3a;
+            --facebook-blue: #1877f2;
+            --success: #00d4aa;
+            --warning: #ffaa00;
+            --danger: #ff4466;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,266 +32,1845 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background Effects */
+        .bg-effects {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-effects::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(0, 212, 170, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 102, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(0, 212, 170, 0.03) 0%, transparent 70%);
+            animation: bgFloat 20s ease-in-out infinite;
+        }
+
+        @keyframes bgFloat {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(2%, 2%) rotate(1deg); }
+            66% { transform: translate(-1%, 1%) rotate(-1deg); }
+        }
+
+        /* Grid Pattern */
+        .grid-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Main Container */
+        .app-container {
+            position: relative;
+            z-index: 1;
             min-height: 100vh;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            flex-direction: column;
         }
 
-        .card-container {
+        /* Header */
+        .header {
+            padding: 1.5rem 2rem;
             display: flex;
-            gap: 30px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .hover-card {
-            width: 350px;
-            height: 450px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            overflow: hidden;
-            cursor: pointer;
-            transition: all 0.4s ease;
-            position: relative;
-        }
-
-        .hover-card:hover {
-            transform: translateY(-10px) scale(1.02);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .card-thumbnail {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-            transition: opacity 0.3s ease;
-        }
-
-        .card-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            position: absolute;
-            top: 0;
-            left: 0;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .card-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-        }
-
-        .hover-card:hover .card-iframe {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .hover-card:hover .card-thumbnail {
-            opacity: 0;
-        }
-
-        .hover-card:hover .card-video {
-            opacity: 1;
-        }
-
-        .card-info {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 20px;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
-            color: white;
-            transform: translateY(100%);
-            transition: transform 0.3s ease;
-        }
-
-        .hover-card:hover .card-info {
-            transform: translateY(0);
-        }
-
-        .card-title {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .card-description {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .play-icon {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 70px;
-            height: 70px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
             align-items: center;
-            transition: all 0.3s ease;
-            opacity: 0.8;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            background: rgba(10, 10, 15, 0.8);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .hover-card:hover .play-icon {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(1.5);
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
 
-        .play-icon::after {
-            content: '';
-            width: 0;
-            height: 0;
-            border-left: 20px solid #667eea;
-            border-top: 12px solid transparent;
-            border-bottom: 12px solid transparent;
-            margin-left: 5px;
-        }
-
-        h1 {
-            color: white;
-            text-align: center;
-            margin-bottom: 50px;
-            font-size: 48px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        .main-wrapper {
-            text-align: center;
-        }
-
-        .loading {
-            color: white;
-            font-size: 24px;
-            text-align: center;
-        }
-
-        .error {
-            color: #ff6b6b;
-            background: white;
-            padding: 20px;
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent-gradient);
             border-radius: 10px;
-            margin: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.2rem;
+        }
+
+        .logo-text {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            padding: 0.375rem;
+            border-radius: 12px;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab-btn.active {
+            background: var(--accent-gradient);
+            color: var(--bg-primary);
+        }
+
+        .tab-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* User Info */
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--accent-primary);
+            object-fit: cover;
+        }
+
+        .user-name {
+            font-weight: 500;
+        }
+
+        .logout-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Tab Panels */
+        .tab-panel {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Login Section */
+        .login-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            text-align: center;
+        }
+
+        .login-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 3rem;
+            max-width: 480px;
+            width: 100%;
+        }
+
+        .login-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #1877f2 0%, #0059cc 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+            box-shadow: 0 20px 40px rgba(24, 119, 242, 0.3);
+        }
+
+        .login-icon svg {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        .login-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+
+        .login-desc {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .fb-login-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: var(--facebook-blue);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .fb-login-btn:hover {
+            background: #0d6efd;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(24, 119, 242, 0.4);
+        }
+
+        .fb-login-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .login-note {
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Conversations Section */
+        .conversations-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            width: 300px;
+        }
+
+        .search-box svg {
+            width: 20px;
+            height: 20px;
+            color: var(--text-muted);
+        }
+
+        .search-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Conversations Grid */
+        .conversations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .conversation-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .conversation-card:hover {
+            border-color: var(--accent-primary);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 212, 170, 0.1);
+        }
+
+        .conversation-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .contact-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            object-fit: cover;
+            border: 2px solid var(--border-color);
+        }
+
+        .contact-info {
+            flex: 1;
+        }
+
+        .contact-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .contact-status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .status-dot.online {
+            background: var(--success);
+        }
+
+        .last-message {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .message-preview {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .message-time {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        .conversation-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .action-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .action-btn.primary {
+            background: var(--accent-gradient);
+            border: none;
+            color: var(--bg-primary);
+        }
+
+        .action-btn.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 212, 170, 0.3);
+        }
+
+        .action-btn.secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .action-btn.secondary:hover {
+            border-color: var(--text-primary);
+            color: var(--text-primary);
+        }
+
+        .action-btn.active {
+            background: var(--success);
+            border-color: var(--success);
+            color: var(--bg-primary);
+        }
+
+        /* Settings Panel */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 2rem;
+        }
+
+        .settings-nav {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1rem;
+            height: fit-content;
+            position: sticky;
+            top: 100px;
+        }
+
+        .settings-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem;
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .settings-nav-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .settings-nav-item.active {
+            background: var(--accent-gradient);
+            color: var(--bg-primary);
+        }
+
+        .settings-nav-item svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .settings-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+        }
+
+        .settings-section {
+            display: none;
+        }
+
+        .settings-section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .settings-section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .settings-section-desc {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-hint {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.375rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        textarea.form-input {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238b8b9e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 18px;
+            padding-right: 3rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .form-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-info {
+            flex: 1;
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .toggle-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            background: var(--border-color);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: var(--accent-primary);
+        }
+
+        .toggle-switch.active::after {
+            left: 27px;
+        }
+
+        .save-btn {
+            padding: 1rem 2rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 10px;
+            color: var(--bg-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 170, 0.3);
+        }
+
+        /* Chat Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .chat-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chat-modal-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .chat-modal-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+        }
+
+        .chat-modal-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .chat-modal-status {
+            font-size: 0.85rem;
+            color: var(--success);
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .close-modal {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .close-modal:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 1rem 1.25rem;
+            border-radius: 16px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .chat-message.incoming {
+            background: var(--bg-tertiary);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-message.outgoing {
+            background: var(--accent-gradient);
+            color: var(--bg-primary);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-message.bot {
+            background: linear-gradient(135deg, #2a2a3a 0%, #1a1a26 100%);
+            border: 1px solid var(--accent-primary);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .bot-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .chat-input-area {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 1rem;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.95rem;
+            resize: none;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            color: var(--bg-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* Loading State */
+        .loading-skeleton {
+            background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 2000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            border-color: var(--success);
+        }
+
+        .toast.error {
+            border-color: var(--danger);
+        }
+
+        .toast-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .toast.success .toast-icon {
+            color: var(--success);
+        }
+
+        .toast.error .toast-icon {
+            color: var(--danger);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .empty-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-desc {
+            color: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .settings-nav {
+                display: flex;
+                overflow-x: auto;
+                gap: 0.5rem;
+                position: static;
+            }
+
+            .settings-nav-item {
+                white-space: nowrap;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .conversations-header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .conversations-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .chat-modal {
+                margin: 1rem;
+                max-height: calc(100vh - 2rem);
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
         }
     </style>
 </head>
 <body>
-    <div class="main-wrapper">
-        <h1>🔥 Trending TikTok Videos</h1>
-        
-        <div class="card-container" id="videos-container">
-            <div class="loading">Loading trending videos...</div>
+    <div class="bg-effects"></div>
+    <div class="grid-pattern"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">K</div>
+                <span class="logo-text">Keplero</span>
+            </div>
+
+            <nav class="tab-nav" id="mainNav" style="display: none;">
+                <button class="tab-btn active" data-tab="conversations">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Conversations
+                </button>
+                <button class="tab-btn" data-tab="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    Settings
+                </button>
+            </nav>
+
+            <div class="user-info" id="userInfo" style="display: none;">
+                <img class="user-avatar" id="userAvatar" src="" alt="User">
+                <span class="user-name" id="userName"></span>
+                <button class="logout-btn" id="logoutBtn">Logout</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Login Section -->
+            <section class="login-section" id="loginSection">
+                <div class="login-card">
+                    <div class="login-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                    </div>
+                    <h1 class="login-title">Connect Facebook</h1>
+                    <p class="login-desc">Sign in with your Facebook account to access your Messenger conversations and integrate our AI chatbot.</p>
+                    <button class="fb-login-btn" id="fbLoginBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                        Continue with Facebook
+                    </button>
+                    <p class="login-note">We only request access to your public profile and messages.</p>
+                </div>
+            </section>
+
+            <!-- Conversations Panel -->
+            <div class="tab-panel" id="conversationsPanel">
+                <div class="conversations-header">
+                    <h2 class="section-title">Your Conversations</h2>
+                    <div class="search-box">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" placeholder="Search conversations..." id="searchInput">
+                    </div>
+                </div>
+
+                <div class="conversations-grid" id="conversationsGrid">
+                    <!-- Conversations will be populated here -->
+                </div>
+            </div>
+
+            <!-- Settings Panel -->
+            <div class="tab-panel" id="settingsPanel">
+                <div class="settings-grid">
+                    <nav class="settings-nav">
+                        <div class="settings-nav-item active" data-settings="api">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                            </svg>
+                            API Configuration
+                        </div>
+                        <div class="settings-nav-item" data-settings="chatbot">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                            Chatbot Settings
+                        </div>
+                        <div class="settings-nav-item" data-settings="collections">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            Collections
+                        </div>
+                        <div class="settings-nav-item" data-settings="advanced">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="4" y1="21" x2="4" y2="14"></line>
+                                <line x1="4" y1="10" x2="4" y2="3"></line>
+                                <line x1="12" y1="21" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12" y2="3"></line>
+                                <line x1="20" y1="21" x2="20" y2="16"></line>
+                                <line x1="20" y1="12" x2="20" y2="3"></line>
+                                <line x1="1" y1="14" x2="7" y2="14"></line>
+                                <line x1="9" y1="8" x2="15" y2="8"></line>
+                                <line x1="17" y1="16" x2="23" y2="16"></line>
+                            </svg>
+                            Advanced
+                        </div>
+                    </nav>
+
+                    <div class="settings-content">
+                        <!-- API Configuration -->
+                        <div class="settings-section active" id="apiSettings">
+                            <h3 class="settings-section-title">API Configuration</h3>
+                            <p class="settings-section-desc">Configure your API endpoint and authentication settings.</p>
+
+                            <div class="form-group">
+                                <label class="form-label">API Endpoint</label>
+                                <input type="url" class="form-input" id="apiEndpoint" value="https://keplerov1-python-2.onrender.com/rag/chat" placeholder="https://api.example.com/chat">
+                                <p class="form-hint">The endpoint URL for your chatbot API</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">API Key</label>
+                                <input type="password" class="form-input" id="apiKey" placeholder="Enter your API key">
+                                <p class="form-hint">Your authentication key for the API</p>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Provider</label>
+                                    <select class="form-input form-select" id="provider">
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic</option>
+                                        <option value="cohere">Cohere</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Top K Results</label>
+                                    <input type="number" class="form-input" id="topK" value="5" min="1" max="20">
+                                </div>
+                            </div>
+
+                            <button class="save-btn" onclick="saveSettings()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Save Configuration
+                            </button>
+                        </div>
+
+                        <!-- Chatbot Settings -->
+                        <div class="settings-section" id="chatbotSettings">
+                            <h3 class="settings-section-title">Chatbot Settings</h3>
+                            <p class="settings-section-desc">Customize how your chatbot behaves and responds.</p>
+
+                            <div class="form-group">
+                                <label class="form-label">System Prompt</label>
+                                <textarea class="form-input" id="systemPrompt" placeholder="You are a helpful assistant that provides accurate and friendly responses...">You are a helpful customer support assistant. Be friendly, concise, and helpful in your responses.</textarea>
+                                <p class="form-hint">Define the personality and behavior of your chatbot</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Thread ID Prefix</label>
+                                <input type="text" class="form-input" id="threadIdPrefix" value="fb_chat_" placeholder="thread_">
+                                <p class="form-hint">Prefix for conversation thread IDs</p>
+                            </div>
+
+                            <div class="form-toggle">
+                                <div class="toggle-info">
+                                    <div class="toggle-label">Elaborate Responses</div>
+                                    <div class="toggle-desc">Enable detailed, comprehensive responses from the chatbot</div>
+                                </div>
+                                <div class="toggle-switch" id="elaborateToggle" onclick="toggleSwitch(this)"></div>
+                            </div>
+
+                            <div class="form-toggle">
+                                <div class="toggle-info">
+                                    <div class="toggle-label">Skip History</div>
+                                    <div class="toggle-desc">Don't include conversation history in API requests</div>
+                                </div>
+                                <div class="toggle-switch" id="skipHistoryToggle" onclick="toggleSwitch(this)"></div>
+                            </div>
+
+                            <button class="save-btn" onclick="saveSettings()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Save Settings
+                            </button>
+                        </div>
+
+                        <!-- Collections -->
+                        <div class="settings-section" id="collectionsSettings">
+                            <h3 class="settings-section-title">Collections</h3>
+                            <p class="settings-section-desc">Manage your RAG collections for knowledge retrieval.</p>
+
+                            <div class="form-group">
+                                <label class="form-label">Default Collection Name</label>
+                                <input type="text" class="form-input" id="collectionName" placeholder="my_collection">
+                                <p class="form-hint">The primary collection to query for responses</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Additional Collections (comma-separated)</label>
+                                <input type="text" class="form-input" id="collectionNames" placeholder="collection1, collection2, collection3">
+                                <p class="form-hint">List of additional collections to include in queries</p>
+                            </div>
+
+                            <button class="save-btn" onclick="saveSettings()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Save Collections
+                            </button>
+                        </div>
+
+                        <!-- Advanced Settings -->
+                        <div class="settings-section" id="advancedSettings">
+                            <h3 class="settings-section-title">Advanced Settings</h3>
+                            <p class="settings-section-desc">Advanced configuration options for power users.</p>
+
+                            <div class="form-toggle">
+                                <div class="toggle-info">
+                                    <div class="toggle-label">Auto-respond Mode</div>
+                                    <div class="toggle-desc">Automatically send chatbot responses without manual approval</div>
+                                </div>
+                                <div class="toggle-switch" id="autoRespondToggle" onclick="toggleSwitch(this)"></div>
+                            </div>
+
+                            <div class="form-toggle">
+                                <div class="toggle-info">
+                                    <div class="toggle-label">Debug Mode</div>
+                                    <div class="toggle-desc">Show detailed logs and API request/response data</div>
+                                </div>
+                                <div class="toggle-switch" id="debugToggle" onclick="toggleSwitch(this)"></div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Request Timeout (seconds)</label>
+                                <input type="number" class="form-input" id="timeout" value="30" min="5" max="120">
+                                <p class="form-hint">Maximum time to wait for API response</p>
+                            </div>
+
+                            <button class="save-btn" onclick="saveSettings()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Save Advanced Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Chat Modal -->
+    <div class="modal-overlay" id="chatModal">
+        <div class="chat-modal">
+            <div class="chat-modal-header">
+                <div class="chat-modal-title">
+                    <img class="chat-modal-avatar" id="chatAvatar" src="" alt="">
+                    <div>
+                        <div class="chat-modal-name" id="chatName"></div>
+                        <div class="chat-modal-status">
+                            <span class="status-dot online"></span>
+                            Chatbot Active
+                        </div>
+                    </div>
+                </div>
+                <button class="close-modal" onclick="closeChat()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages will be populated here -->
+            </div>
+            <div class="chat-input-area">
+                <textarea class="chat-input" id="chatInput" placeholder="Type a message..." rows="1"></textarea>
+                <button class="send-btn" onclick="sendMessage()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
-    <script>
-        const API_URL = 'http://localhost:5000';
-        const videosContainer = document.getElementById('videos-container');
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span id="toastMessage">Settings saved successfully!</span>
+    </div>
 
-        // Fetch trending videos from backend
-        async function loadTrendingVideos() {
-            try {
-                const response = await fetch(`${API_URL}/api/trending`);
-                const data = await response.json();
-                
-                if (data.videos && data.videos.length > 0) {
-                    displayVideos(data.videos);
-                } else {
-                    videosContainer.innerHTML = '<div class="error">No trending videos found</div>';
-                }
-            } catch (error) {
-                console.error('Error loading videos:', error);
-                videosContainer.innerHTML = '<div class="error">Error loading videos. Make sure the Flask server is running!</div>';
+    <!-- Facebook SDK -->
+    <script>
+        // App Configuration
+        const APP_CONFIG = {
+            facebookAppId: 'YOUR_FACEBOOK_APP_ID', // Replace with your Facebook App ID
+            apiEndpoint: 'https://keplerov1-python-2.onrender.com/rag/chat',
+            permissions: ['public_profile', 'pages_messaging', 'pages_read_engagement']
+        };
+
+        // State Management
+        let state = {
+            isLoggedIn: false,
+            user: null,
+            accessToken: null,
+            conversations: [],
+            activeConversations: new Set(),
+            settings: {
+                apiEndpoint: 'https://keplerov1-python-2.onrender.com/rag/chat',
+                apiKey: '',
+                provider: 'openai',
+                topK: 5,
+                systemPrompt: 'You are a helpful customer support assistant. Be friendly, concise, and helpful in your responses.',
+                threadIdPrefix: 'fb_chat_',
+                collectionName: '',
+                collectionNames: [],
+                elaborate: false,
+                skipHistory: false,
+                autoRespond: false,
+                debug: false,
+                timeout: 30
+            }
+        };
+
+        // Load settings from localStorage
+        function loadSettings() {
+            const saved = localStorage.getItem('kepleroSettings');
+            if (saved) {
+                state.settings = { ...state.settings, ...JSON.parse(saved) };
+                applySettingsToUI();
             }
         }
 
-        // Display videos as cards
-        function displayVideos(videos) {
-            videosContainer.innerHTML = '';
+        // Apply settings to UI
+        function applySettingsToUI() {
+            document.getElementById('apiEndpoint').value = state.settings.apiEndpoint;
+            document.getElementById('apiKey').value = state.settings.apiKey;
+            document.getElementById('provider').value = state.settings.provider;
+            document.getElementById('topK').value = state.settings.topK;
+            document.getElementById('systemPrompt').value = state.settings.systemPrompt;
+            document.getElementById('threadIdPrefix').value = state.settings.threadIdPrefix;
+            document.getElementById('collectionName').value = state.settings.collectionName;
+            document.getElementById('collectionNames').value = state.settings.collectionNames.join(', ');
+            document.getElementById('timeout').value = state.settings.timeout;
             
-            videos.forEach(video => {
-                const card = createVideoCard(video);
-                videosContainer.appendChild(card);
+            if (state.settings.elaborate) document.getElementById('elaborateToggle').classList.add('active');
+            if (state.settings.skipHistory) document.getElementById('skipHistoryToggle').classList.add('active');
+            if (state.settings.autoRespond) document.getElementById('autoRespondToggle').classList.add('active');
+            if (state.settings.debug) document.getElementById('debugToggle').classList.add('active');
+        }
+
+        // Save settings
+        function saveSettings() {
+            state.settings.apiEndpoint = document.getElementById('apiEndpoint').value;
+            state.settings.apiKey = document.getElementById('apiKey').value;
+            state.settings.provider = document.getElementById('provider').value;
+            state.settings.topK = parseInt(document.getElementById('topK').value);
+            state.settings.systemPrompt = document.getElementById('systemPrompt').value;
+            state.settings.threadIdPrefix = document.getElementById('threadIdPrefix').value;
+            state.settings.collectionName = document.getElementById('collectionName').value;
+            state.settings.collectionNames = document.getElementById('collectionNames').value.split(',').map(s => s.trim()).filter(s => s);
+            state.settings.timeout = parseInt(document.getElementById('timeout').value);
+            state.settings.elaborate = document.getElementById('elaborateToggle').classList.contains('active');
+            state.settings.skipHistory = document.getElementById('skipHistoryToggle').classList.contains('active');
+            state.settings.autoRespond = document.getElementById('autoRespondToggle').classList.contains('active');
+            state.settings.debug = document.getElementById('debugToggle').classList.contains('active');
+
+            localStorage.setItem('kepleroSettings', JSON.stringify(state.settings));
+            showToast('Settings saved successfully!', 'success');
+        }
+
+        // Toggle switch
+        function toggleSwitch(element) {
+            element.classList.toggle('active');
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toast.className = `toast ${type}`;
+            toastMessage.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize Facebook SDK
+        window.fbAsyncInit = function() {
+            FB.init({
+                appId: APP_CONFIG.facebookAppId,
+                cookie: true,
+                xfbml: true,
+                version: 'v18.0'
             });
+
+            // Check login status
+            FB.getLoginStatus(function(response) {
+                if (response.status === 'connected') {
+                    handleFacebookLogin(response);
+                }
+            });
+        };
+
+        // Load Facebook SDK
+        (function(d, s, id) {
+            var js, fjs = d.getElementsByTagName(s)[0];
+            if (d.getElementById(id)) return;
+            js = d.createElement(s); js.id = id;
+            js.src = "https://connect.facebook.net/en_US/sdk.js";
+            fjs.parentNode.insertBefore(js, fjs);
+        }(document, 'script', 'facebook-jssdk'));
+
+        // Facebook Login Handler
+        document.getElementById('fbLoginBtn').addEventListener('click', function() {
+            // For demo purposes, simulate login
+            simulateFacebookLogin();
             
-            // Add hover event listeners
-            setupHoverEvents();
+            // Uncomment below for real Facebook login
+            /*
+            FB.login(function(response) {
+                if (response.authResponse) {
+                    handleFacebookLogin(response);
+                } else {
+                    showToast('Login cancelled', 'error');
+                }
+            }, { scope: APP_CONFIG.permissions.join(',') });
+            */
+        });
+
+        // Simulate Facebook Login (for demo)
+        function simulateFacebookLogin() {
+            state.isLoggedIn = true;
+            state.user = {
+                id: '123456789',
+                name: 'John Doe',
+                picture: 'https://i.pravatar.cc/150?img=68'
+            };
+            state.accessToken = 'demo_access_token';
+            
+            updateUIForLoggedInUser();
+            loadDemoConversations();
         }
 
-        // Create a video card element
-        function createVideoCard(video) {
-            const card = document.createElement('div');
-            card.className = 'hover-card';
-            
-            card.innerHTML = `
-                <img src="${video.thumbnail}" 
-                     alt="${video.title}" 
-                     class="card-thumbnail">
-                
-                <video class="card-video" loop muted playsinline preload="metadata">
-                    <source src="${API_URL}/api/proxy-video?url=${encodeURIComponent(video.video_url)}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-                
-                <div class="play-icon"></div>
-                
-                <div class="card-info">
-                    <div class="card-title">${video.author}</div>
-                    <div class="card-description">${video.title || 'Hover to preview'}</div>
-                </div>
-            `;
-            
-            return card;
-        }
+        // Handle Facebook Login Response
+        function handleFacebookLogin(response) {
+            state.accessToken = response.authResponse.accessToken;
+            state.isLoggedIn = true;
 
-        // Setup hover events for all cards
-        function setupHoverEvents() {
-            const cards = document.querySelectorAll('.hover-card');
-            
-            cards.forEach(card => {
-                const video = card.querySelector('.card-video');
+            FB.api('/me', { fields: 'id,name,picture' }, function(userResponse) {
+                state.user = {
+                    id: userResponse.id,
+                    name: userResponse.name,
+                    picture: userResponse.picture?.data?.url || ''
+                };
                 
-                // Play video on hover
-                card.addEventListener('mouseenter', () => {
-                    if (video) {
-                        video.play().catch(err => {
-                            console.log('Video play failed:', err);
-                        });
-                    }
-                });
-                
-                // Pause video when hover ends
-                card.addEventListener('mouseleave', () => {
-                    if (video) {
-                        video.pause();
-                        video.currentTime = 0; // Reset to beginning
-                    }
-                });
+                updateUIForLoggedInUser();
+                loadConversations();
             });
         }
 
-        // Load videos on page load
-        loadTrendingVideos();
+        // Update UI for logged in user
+        function updateUIForLoggedInUser() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('mainNav').style.display = 'flex';
+            document.getElementById('userInfo').style.display = 'flex';
+            document.getElementById('conversationsPanel').classList.add('active');
+            
+            document.getElementById('userAvatar').src = state.user.picture;
+            document.getElementById('userName').textContent = state.user.name;
+        }
+
+        // Load conversations (demo data)
+        function loadDemoConversations() {
+            state.conversations = [
+                {
+                    id: '1',
+                    participant: { name: 'Sarah Johnson', picture: 'https://i.pravatar.cc/150?img=1', online: true },
+                    lastMessage: { text: 'Hi! I have a question about your product pricing and availability.', timestamp: new Date(Date.now() - 300000) },
+                    messages: [
+                        { id: '1', text: 'Hi! I have a question about your product pricing and availability.', incoming: true, timestamp: new Date(Date.now() - 300000) }
+                    ]
+                },
+                {
+                    id: '2',
+                    participant: { name: 'Michael Chen', picture: 'https://i.pravatar.cc/150?img=3', online: false },
+                    lastMessage: { text: 'Thanks for the quick response! The order arrived perfectly.', timestamp: new Date(Date.now() - 3600000) },
+                    messages: [
+                        { id: '1', text: 'Is my order #1234 still on track for delivery?', incoming: true, timestamp: new Date(Date.now() - 7200000) },
+                        { id: '2', text: 'Yes! Your order is out for delivery today.', incoming: false, timestamp: new Date(Date.now() - 3700000) },
+                        { id: '3', text: 'Thanks for the quick response! The order arrived perfectly.', incoming: true, timestamp: new Date(Date.now() - 3600000) }
+                    ]
+                },
+                {
+                    id: '3',
+                    participant: { name: 'Emily Davis', picture: 'https://i.pravatar.cc/150?img=5', online: true },
+                    lastMessage: { text: 'Can you help me with a refund request?', timestamp: new Date(Date.now() - 7200000) },
+                    messages: [
+                        { id: '1', text: 'Can you help me with a refund request?', incoming: true, timestamp: new Date(Date.now() - 7200000) }
+                    ]
+                },
+                {
+                    id: '4',
+                    participant: { name: 'David Wilson', picture: 'https://i.pravatar.cc/150?img=8', online: false },
+                    lastMessage: { text: 'What are your business hours?', timestamp: new Date(Date.now() - 86400000) },
+                    messages: [
+                        { id: '1', text: 'What are your business hours?', incoming: true, timestamp: new Date(Date.now() - 86400000) }
+                    ]
+                },
+                {
+                    id: '5',
+                    participant: { name: 'Lisa Thompson', picture: 'https://i.pravatar.cc/150?img=9', online: true },
+                    lastMessage: { text: 'Do you ship internationally?', timestamp: new Date(Date.now() - 172800000) },
+                    messages: [
+                        { id: '1', text: 'Do you ship internationally?', incoming: true, timestamp: new Date(Date.now() - 172800000) }
+                    ]
+                },
+                {
+                    id: '6',
+                    participant: { name: 'James Brown', picture: 'https://i.pravatar.cc/150?img=12', online: false },
+                    lastMessage: { text: 'I need help setting up my account.', timestamp: new Date(Date.now() - 259200000) },
+                    messages: [
+                        { id: '1', text: 'I need help setting up my account.', incoming: true, timestamp: new Date(Date.now() - 259200000) }
+                    ]
+                }
+            ];
+
+            renderConversations();
+        }
+
+        // Load real conversations from Facebook
+        function loadConversations() {
+            // In production, you would fetch from Facebook Graph API
+            // FB.api('/me/conversations', { fields: 'participants,messages{message,from,created_time}' }, ...)
+            loadDemoConversations();
+        }
+
+        // Render conversations
+        function renderConversations() {
+            const grid = document.getElementById('conversationsGrid');
+            grid.innerHTML = '';
+
+            state.conversations.forEach(conv => {
+                const isActive = state.activeConversations.has(conv.id);
+                const card = document.createElement('div');
+                card.className = 'conversation-card';
+                card.innerHTML = `
+                    <div class="conversation-header">
+                        <img class="contact-avatar" src="${conv.participant.picture}" alt="${conv.participant.name}">
+                        <div class="contact-info">
+                            <div class="contact-name">${conv.participant.name}</div>
+                            <div class="contact-status">
+                                <span class="status-dot ${conv.participant.online ? 'online' : ''}"></span>
+                                ${conv.participant.online ? 'Online' : 'Offline'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="last-message">
+                        <div class="message-preview">${conv.lastMessage.text}</div>
+                        <div class="message-time">${formatTime(conv.lastMessage.timestamp)}</div>
+                    </div>
+                    <div class="conversation-actions">
+                        <button class="action-btn secondary" onclick="openChat('${conv.id}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            View Chat
+                        </button>
+                        <button class="action-btn ${isActive ? 'active' : 'primary'}" onclick="toggleChatbot('${conv.id}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            ${isActive ? 'Bot Active' : 'Enable Bot'}
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Format timestamp
+        function formatTime(date) {
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+            return date.toLocaleDateString();
+        }
+
+        // Toggle chatbot for conversation
+        function toggleChatbot(convId) {
+            if (state.activeConversations.has(convId)) {
+                state.activeConversations.delete(convId);
+                showToast('Chatbot disabled for this conversation', 'success');
+            } else {
+                state.activeConversations.add(convId);
+                showToast('Chatbot enabled! It will now handle responses.', 'success');
+            }
+            renderConversations();
+        }
+
+        // Current chat state
+        let currentChatId = null;
+
+        // Open chat modal
+        function openChat(convId) {
+            currentChatId = convId;
+            const conv = state.conversations.find(c => c.id === convId);
+            if (!conv) return;
+
+            document.getElementById('chatAvatar').src = conv.participant.picture;
+            document.getElementById('chatName').textContent = conv.participant.name;
+
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = '';
+
+            conv.messages.forEach(msg => {
+                addMessageToChat(msg.text, msg.incoming ? 'incoming' : 'outgoing', msg.isBot);
+            });
+
+            document.getElementById('chatModal').classList.add('active');
+        }
+
+        // Close chat modal
+        function closeChat() {
+            document.getElementById('chatModal').classList.remove('active');
+            currentChatId = null;
+        }
+
+        // Add message to chat
+        function addMessageToChat(text, type, isBot = false) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const msgEl = document.createElement('div');
+            
+            if (isBot) {
+                msgEl.className = 'chat-message bot';
+                msgEl.innerHTML = `
+                    <div class="bot-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        AI Response
+                    </div>
+                    ${text}
+                `;
+            } else {
+                msgEl.className = `chat-message ${type}`;
+                msgEl.textContent = text;
+            }
+            
+            messagesContainer.appendChild(msgEl);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !currentChatId) return;
+
+            input.value = '';
+            addMessageToChat(text, 'outgoing');
+
+            // If chatbot is active for this conversation, get AI response
+            if (state.activeConversations.has(currentChatId)) {
+                await getChatbotResponse(text);
+            }
+        }
+
+        // Get chatbot response
+        async function getChatbotResponse(query) {
+            const conv = state.conversations.find(c => c.id === currentChatId);
+            if (!conv) return;
+
+            // Show typing indicator
+            const typingEl = document.createElement('div');
+            typingEl.className = 'chat-message bot';
+            typingEl.id = 'typing-indicator';
+            typingEl.innerHTML = '<div class="bot-badge">AI is typing...</div>';
+            document.getElementById('chatMessages').appendChild(typingEl);
+
+            try {
+                const response = await fetch(state.settings.apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        collection_name: state.settings.collectionName || 'default',
+                        collection_names: state.settings.collectionNames,
+                        top_k: state.settings.topK,
+                        thread_id: `${state.settings.threadIdPrefix}${currentChatId}`,
+                        system_prompt: state.settings.systemPrompt,
+                        provider: state.settings.provider,
+                        api_key: state.settings.apiKey,
+                        elaborate: state.settings.elaborate,
+                        skip_history: state.settings.skipHistory
+                    })
+                });
+
+                // Remove typing indicator
+                document.getElementById('typing-indicator')?.remove();
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const botResponse = data.response || data.answer || data.message || 'I apologize, but I could not generate a response.';
+                    addMessageToChat(botResponse, 'incoming', true);
+                    
+                    // Update conversation
+                    conv.messages.push({
+                        id: Date.now().toString(),
+                        text: botResponse,
+                        incoming: true,
+                        isBot: true,
+                        timestamp: new Date()
+                    });
+                } else {
+                    throw new Error('API request failed');
+                }
+            } catch (error) {
+                document.getElementById('typing-indicator')?.remove();
+                console.error('Chatbot error:', error);
+                addMessageToChat('I apologize, but I encountered an error. Please try again later.', 'incoming', true);
+            }
+        }
+
+        // Tab Navigation
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const tab = this.dataset.tab;
+                
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(`${tab}Panel`).classList.add('active');
+            });
+        });
+
+        // Settings Navigation
+        document.querySelectorAll('.settings-nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const settings = this.dataset.settings;
+                
+                document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+                document.getElementById(`${settings}Settings`).classList.add('active');
+            });
+        });
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            const cards = document.querySelectorAll('.conversation-card');
+            
+            cards.forEach((card, index) => {
+                const conv = state.conversations[index];
+                const match = conv.participant.name.toLowerCase().includes(query) ||
+                              conv.lastMessage.text.toLowerCase().includes(query);
+                card.style.display = match ? 'block' : 'none';
+            });
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            // FB.logout();
+            state.isLoggedIn = false;
+            state.user = null;
+            state.accessToken = null;
+            state.conversations = [];
+            state.activeConversations.clear();
+            
+            document.getElementById('loginSection').style.display = 'flex';
+            document.getElementById('mainNav').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'none';
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            
+            showToast('Logged out successfully', 'success');
+        });
+
+        // Enter key to send message
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Close modal on overlay click
+        document.getElementById('chatModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeChat();
+            }
+        });
+
+        // Initialize
+        loadSettings();
     </script>
 </body>
 </html>
-

@@ -123,7 +123,7 @@ class RAGWorkflow:
             if not api_key:
                 raise ValueError("Gemini provider requires an API key")
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-pro",
+                model="gemini-2.0-flash-lite",  # OPTIMIZED: Changed from gemini-2.5-pro (5-10x faster)
                 temperature=0.3,
                 google_api_key=api_key
             )
@@ -186,6 +186,9 @@ class RAGWorkflow:
         Returns:
             Updated state with retrieved documents
         """
+        import time as perf_time
+        retrieve_start = perf_time.time()
+        
         try:
             # Get collection names from state (supports both old and new format)
             collections = None
@@ -196,9 +199,9 @@ class RAGWorkflow:
             
             # If collections is empty list or None, search ALL documents
             if collections:
-                log_info(f"Retrieving documents from collections: {collections} for query: '{state['query']}'")
+                log_debug(f"Retrieving documents from collections: {collections} for query: '{state['query']}'")
             else:
-                log_info(f"Retrieving documents from ALL collections for query: '{state['query']}'")
+                log_debug(f"Retrieving documents from ALL collections for query: '{state['query']}'")
             
             # Retrieve documents using RAG service with multiple collections support
             # If collections is None or empty, searches all documents
@@ -207,6 +210,8 @@ class RAGWorkflow:
                 collections=collections,
                 top_k=state.get("top_k", 5)
             )
+            
+            log_info(f"⏱️ RETRIEVE: Completed in {(perf_time.time() - retrieve_start)*1000:.0f}ms")
             
             # Format context from retrieved documents
             if retrieved_docs:
@@ -242,8 +247,11 @@ class RAGWorkflow:
         Returns:
             Updated state with generated answer
         """
+        import time as perf_time
+        generate_start = perf_time.time()
+        
         try:
-            log_info("Generating answer based on retrieved context and conversation history")
+            log_debug("Generating answer based on retrieved context and conversation history")
             
             # OPTIMIZATION: Use cached LLM instance to avoid re-initialization overhead
             provider = state.get("provider", "openai").lower()
@@ -304,8 +312,10 @@ class RAGWorkflow:
                     return state
             
             # Generate answer using LLM (dynamic based on provider)
+            llm_start = perf_time.time()
             response = llm.invoke(messages)
             state["answer"] = response.content
+            log_info(f"⏱️ LLM CALL: Completed in {(perf_time.time() - llm_start)*1000:.0f}ms (provider: {provider})")
             
             # Update conversation history
             if not state.get("conversation_history"):
@@ -316,7 +326,7 @@ class RAGWorkflow:
                 "answer": state["answer"]
             })
             
-            log_info("Answer generated successfully")
+            log_info(f"⏱️ GENERATE: Total node completed in {(perf_time.time() - generate_start)*1000:.0f}ms")
             log_debug(f"Generated answer: {state['answer'][:100]}...")
             
             return state
@@ -356,7 +366,11 @@ class RAGWorkflow:
         Returns:
             Dictionary with answer and retrieved documents
         """
+        import time as perf_time  # For performance timing
+        
         try:
+            run_start = perf_time.time()
+            
             # Determine which collections to use
             collections = []
             if collection_names:
@@ -375,7 +389,8 @@ class RAGWorkflow:
             
             # OPTIMIZATION: Retrieve conversation history from checkpointer (optional for performance)
             conversation_history = []
-            if not skip_history:
+            if not skip_history and thread_id:  # Only fetch history if thread_id is provided
+                history_start = perf_time.time()
                 try:
                     # Get the latest state from checkpointer for this thread
                     state_snapshot = self.graph.get_state(config)
@@ -383,11 +398,11 @@ class RAGWorkflow:
                         existing_history = state_snapshot.values.get("conversation_history", [])
                         if existing_history:
                             conversation_history = existing_history
-                            log_info(f"Retrieved {len(conversation_history)} previous conversation turns")
+                            log_info(f"Retrieved {len(conversation_history)} previous conversation turns in {(perf_time.time() - history_start)*1000:.0f}ms")
                 except Exception as e:
                     log_debug(f"No previous conversation history found or error retrieving: {str(e)}")
             else:
-                log_info("Skipping conversation history lookup for faster response")
+                log_debug("Skipping conversation history lookup (no thread_id or skip_history=True)")
             
             # Initialize state with conversation history
             initial_state = {
@@ -419,7 +434,8 @@ class RAGWorkflow:
                 log_error(f"Traceback:\n{traceback.format_exc()}")
                 raise
             
-            log_info("RAG workflow completed successfully")
+            total_time = (perf_time.time() - run_start) * 1000
+            log_info(f"⏱️ WORKFLOW TOTAL: Completed in {total_time:.0f}ms")
             
             return {
                 "answer": result["answer"],

@@ -299,15 +299,28 @@ async def entrypoint(ctx: agents.JobContext):
 
     # 5. Recording & Cleanup Logic
     egress_id = None
-    gcs_bucket = os.getenv("GCS_BUCKET_NAME")
+    recording_started = asyncio.Event()  # Signal when recording is ready
+    gcs_bucket = os.getenv("GCS_BUCKET") or os.getenv("GCS_BUCKET_NAME")
     session_start_time = datetime.utcnow()
 
     async def start_recording():
         nonlocal egress_id
         try:
-            creds_json = os.getenv("GCP_CREDENTIALS_JSON")
-            if not gcs_bucket or not creds_json: 
+            creds_json_raw = os.getenv("GCP_CREDENTIALS_JSON")
+            if not gcs_bucket or not creds_json_raw: 
                 logger.warning("Recording skipped: GCS_BUCKET_NAME or GCP_CREDENTIALS_JSON missing")
+                recording_started.set()  # Signal even if not started
+                return
+            
+            # Fix escaped newlines in private_key (common issue with env vars)
+            try:
+                creds_dict = json.loads(creds_json_raw)
+                if "private_key" in creds_dict:
+                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                creds_json = json.dumps(creds_dict)
+            except json.JSONDecodeError:
+                logger.error("Failed to parse GCP_CREDENTIALS_JSON")
+                recording_started.set()
                 return
             
             egress_info = await ctx.api.egress.start_room_composite_egress(
@@ -327,6 +340,8 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info(f"Recording started: {egress_id}")
         except Exception as e:
             logger.error(f"Failed to start recording: {e}")
+        finally:
+            recording_started.set()  # Always signal completion
 
     async def stop_recording():
         """
@@ -334,6 +349,13 @@ async def entrypoint(ctx: agents.JobContext):
         This runs BEFORE the main cleanup to ensure API is still available.
         """
         nonlocal egress_id
+        
+        # Wait for recording to be initialized (with timeout)
+        try:
+            await asyncio.wait_for(recording_started.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for recording to start")
+        
         if not egress_id:
             logger.warning("stop_recording called but egress_id is None - recording may not have started")
             return
@@ -354,6 +376,9 @@ async def entrypoint(ctx: agents.JobContext):
             if status in [api.EgressStatus.EGRESS_STARTING, api.EgressStatus.EGRESS_ACTIVE]:
                 await ctx.api.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
                 logger.info(f"Recording stopped successfully: {egress_id}")
+                
+                # Wait a moment for upload to complete
+                await asyncio.sleep(1.0)
             else:
                 logger.warning(f"Egress {egress_id} is in state {status}, skipping stop request.")
                 
@@ -394,9 +419,10 @@ async def entrypoint(ctx: agents.JobContext):
         except Exception as e:
             logger.error(f"Cleanup failed: {e}")
 
-    # Register shutdown callbacks (stop_recording runs first, then cleanup_and_save)
-    ctx.add_shutdown_callback(lambda: asyncio.create_task(stop_recording()))
-    ctx.add_shutdown_callback(lambda: asyncio.create_task(cleanup_and_save()))
+    # Register shutdown callbacks - pass async functions directly (they will be awaited)
+    # Order matters: stop_recording first while API is still connected, then cleanup
+    ctx.add_shutdown_callback(stop_recording)
+    ctx.add_shutdown_callback(cleanup_and_save)
 
     # 6. Start Session
     assistant = Assistant(

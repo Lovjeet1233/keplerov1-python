@@ -375,20 +375,28 @@ class RAGService:
         Returns:
             List of search results with text, score, collection, and chunk_index
         """
+        import time as perf_time
+        
         try:
             if self.index.ntotal == 0:
                 print("Warning: Index is empty")
                 return []
             
             # OPTIMIZATION: Use cached embedding for repeated queries
+            embed_start = perf_time.time()
             query_hash = self._get_query_cache_key(query)
             query_embedding = list(self._cached_embed_query(query_hash, query))
             query_vector = np.array([query_embedding], dtype=np.float32)
             faiss.normalize_L2(query_vector)
+            embed_time = (perf_time.time() - embed_start) * 1000
             
             # Search FAISS index (get more results for filtering)
+            search_start = perf_time.time()
             search_k = min(top_k * 10, self.index.ntotal) if collections else top_k
             distances, indices = self.index.search(query_vector, search_k)
+            search_time = (perf_time.time() - search_start) * 1000
+            
+            print(f"⏱️ SEARCH: Embedding={embed_time:.0f}ms, FAISS={search_time:.0f}ms")
             
             # Prepare results
             results = []
