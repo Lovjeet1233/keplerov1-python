@@ -821,15 +821,15 @@ async def list_sip_trunks():
             
             # List outbound trunks
             try:
-                outbound_list_request = sip.ListSIPTrunkRequest()
-                outbound_response = await lk.sip.list_sip_trunk(outbound_list_request)
+                outbound_list_request = sip.ListSIPOutboundTrunkRequest()
+                outbound_response = await lk.sip.list_sip_outbound_trunk(outbound_list_request)
                 
                 for trunk in outbound_response.items:
                     outbound_trunks.append({
                         "trunk_id": trunk.sip_trunk_id,
                         "name": trunk.name if hasattr(trunk, 'name') else "N/A",
-                        "outbound_number": trunk.outbound_number if hasattr(trunk, 'outbound_number') else "N/A",
-                        "outbound_address": trunk.outbound_address if hasattr(trunk, 'outbound_address') else "N/A"
+                        "outbound_number": trunk.numbers[0] if hasattr(trunk, 'numbers') and trunk.numbers else "N/A",
+                        "outbound_address": trunk.address if hasattr(trunk, 'address') else "N/A"
                     })
                 log_info(f"✓ Listed {len(outbound_trunks)} outbound trunk(s)")
             except Exception as e:

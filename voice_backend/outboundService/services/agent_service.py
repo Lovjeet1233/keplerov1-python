@@ -293,7 +293,7 @@ async def entrypoint(ctx: agents.JobContext):
         base_url="https://api.eu.residency.elevenlabs.io/v1",
         api_key=os.getenv("ELEVEN_API_KEY"),
         model="eleven_flash_v2_5",  # Flash model = fastest (~150ms vs turbo ~250ms)
-        voice=voice_id,
+        voice_id=voice_id,
         language=tts_language,
         streaming_latency=3,  # 0 = lowest latency (was 1)
     )
