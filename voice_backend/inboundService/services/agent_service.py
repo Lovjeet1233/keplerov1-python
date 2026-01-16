@@ -54,6 +54,18 @@ except ImportError:
         def retrieval_based_search(self, query, collections=None, top_k=1): return []
     def get_mongodb_manager(uri): return None
 
+# Import ecommerce tools
+try:
+    from voice_backend.outboundService.services.tool import EcommerceClient, set_ecommerce_client, get_ecommerce_client
+except ImportError:
+    # Placeholder for compatibility
+    class EcommerceClient:
+        def __init__(self, **kwargs): pass
+        async def get_products(self, limit=5): return "Ecommerce tools not available"
+        async def get_orders(self, limit=5): return "Ecommerce tools not available"
+    def set_ecommerce_client(client): pass
+    def get_ecommerce_client(): return None
+
 # --- Configuration ---
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
@@ -136,6 +148,7 @@ async def send_smtp_email_async(to: str, subject: str, body: str, cc: Optional[s
 class Assistant(Agent):
     def __init__(self, instructions: str = None, agent_config: Dict[str, Any] = None) -> None:
         self.agent_config = agent_config or {}
+        self._agent_session = None  # Will be set when session starts
         openai_api_key = os.getenv("OPENAI_API_KEY")
         self.rag_service = RAGService(openai_api_key=openai_api_key) if openai_api_key else None
         super().__init__(instructions=instructions)
@@ -223,6 +236,68 @@ class Assistant(Agent):
         asyncio.create_task(send_smtp_email_async(to, final_subject, final_body, final_cc))
         return "success: email queued"
 
+    @function_tool
+    async def get_products(self, ctx: RunContext, limit: Optional[int] = 5) -> str:
+        """
+        Fetch products from the connected ecommerce store.
+        Use this tool to get product information, pricing, and availability.
+        
+        Args:
+            limit: Number of products to fetch (default: 5, max: 20)
+        
+        Returns:
+            Formatted product information
+        """
+        # Provide immediate feedback to the caller
+        if self._agent_session:
+            await self._agent_session.say("Let me check our products for you, just a moment.")
+        
+        client = get_ecommerce_client()
+        if not client:
+            return "No ecommerce platform is connected. Please configure ecommerce credentials."
+        
+        # Limit to max 20 products
+        limit = min(limit or 5, 20)
+        
+        try:
+            result = await client.get_products(limit=limit)
+            logger.info(f"✓ Products fetched successfully (limit: {limit})")
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching products: {e}")
+            return f"Error fetching products: {str(e)}"
+
+    @function_tool
+    async def get_orders(self, ctx: RunContext, limit: Optional[int] = 5) -> str:
+        """
+        Fetch recent orders from the connected ecommerce store.
+        Use this tool to check order status, history, and details.
+        
+        Args:
+            limit: Number of orders to fetch (default: 5, max: 20)
+        
+        Returns:
+            Formatted order information
+        """
+        # Provide immediate feedback to the caller
+        if self._agent_session:
+            await self._agent_session.say("Let me look up the order information, one moment please.")
+        
+        client = get_ecommerce_client()
+        if not client:
+            return "No ecommerce platform is connected. Please configure ecommerce credentials."
+        
+        # Limit to max 20 orders
+        limit = min(limit or 5, 20)
+        
+        try:
+            result = await client.get_orders(limit=limit)
+            logger.info(f"✓ Orders fetched successfully (limit: {limit})")
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching orders: {e}")
+            return f"Error fetching orders: {str(e)}"
+
 # --- Main Entrypoint ---
 
 # async def request_fnc(req: JobRequest) -> None:
@@ -271,6 +346,27 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info(f"Config loaded for {called_number} - Language: {language}, Voice ID: {voice_id}")
     logger.info(f"Escalation Condition: {escalation_condition}")
     logger.info(f"Collection Names: {collection_names}")
+    
+    # Initialize ecommerce client if credentials are provided
+    ecommerce_creds = agent_config.get("ecommerce_credentials")
+    if ecommerce_creds:
+        try:
+            ecommerce_client = EcommerceClient(
+                platform=ecommerce_creds.get("platform", "woocommerce"),
+                base_url=ecommerce_creds.get("base_url"),
+                api_key=ecommerce_creds.get("api_key"),
+                api_secret=ecommerce_creds.get("api_secret"),
+                access_token=ecommerce_creds.get("access_token")
+            )
+            set_ecommerce_client(ecommerce_client)
+            logger.info(f"✓ Ecommerce client initialized: {ecommerce_creds.get('platform')}")
+            logger.info(f"  Store URL: {ecommerce_creds.get('base_url')}")
+        except Exception as e:
+            logger.error(f"Failed to initialize ecommerce client: {e}")
+            set_ecommerce_client(None)
+    else:
+        set_ecommerce_client(None)
+        logger.info("No ecommerce credentials configured")
     
     # 3. Initialize AI Components
     # Initialize STT (Deepgram Nova-3) - use language from config
@@ -444,6 +540,9 @@ async def entrypoint(ctx: agents.JobContext):
         instructions=full_instructions,
         agent_config=agent_config
     )
+    
+    # Set the session reference in the assistant for tool access
+    assistant._agent_session = session
     
     await session.start(room=ctx.room, agent=assistant, room_input_options=RoomInputOptions(noise_cancellation=noise_cancellation.BVC()))
     
