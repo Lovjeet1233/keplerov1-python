@@ -72,7 +72,7 @@ MONGODB_DATABASE = "IslandAI"
 INBOUND_CONFIG_COLLECTION = "inbound-agent-config"
 
 # Gmail API Configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://keplerov1-python-2.onrender.com")
 GMAIL_USER_EMAIL = os.getenv("GMAIL_USER_EMAIL", "")  # Authorized Gmail address
 
 # Global Caches

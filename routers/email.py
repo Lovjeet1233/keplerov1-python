@@ -40,7 +40,7 @@ _cipher = Fernet(ENCRYPTION_KEY)
 # OAuth Configuration
 CLIENT_SECRETS_FILE = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-REDIRECT_URI = os.getenv('OAUTH_REDIRECT_URI', 'http://localhost:8000/email/oauth2callback')
+REDIRECT_URI = os.getenv('OAUTH_REDIRECT_URI', 'https://keplerov1-python-2.onrender.com/email/oauth2callback')
 
 
 # Pydantic Models
