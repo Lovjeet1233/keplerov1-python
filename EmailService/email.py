@@ -59,7 +59,10 @@ class GmailService:
         
         # OAuth Configuration
         self.client_secrets_file = client_secrets_file
-        self.scopes = ['https://www.googleapis.com/auth/gmail.send']
+        self.scopes = [
+            'https://www.googleapis.com/auth/gmail.send',
+            'https://www.googleapis.com/auth/userinfo.email'
+        ]
         self.redirect_uri = redirect_uri
     
     def _encrypt_token(self, token: str) -> str:
