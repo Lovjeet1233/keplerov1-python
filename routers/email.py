@@ -41,6 +41,7 @@ _cipher = Fernet(ENCRYPTION_KEY)
 CLIENT_SECRETS_FILE = 'credentials.json'
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/userinfo.email'
 ]
 REDIRECT_URI = os.getenv('OAUTH_REDIRECT_URI', 'https://keplerov1-python-2.onrender.com/email/oauth2callback')

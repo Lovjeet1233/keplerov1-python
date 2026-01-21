@@ -61,6 +61,7 @@ class GmailService:
         self.client_secrets_file = client_secrets_file
         self.scopes = [
             'https://www.googleapis.com/auth/gmail.send',
+            'https://www.googleapis.com/auth/gmail.readonly',
             'https://www.googleapis.com/auth/userinfo.email'
         ]
         self.redirect_uri = redirect_uri
