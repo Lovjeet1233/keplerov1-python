@@ -58,7 +58,6 @@ livekit-plugins-noise-cancellation==0.2.5
 twilio==9.8.6
 phonenumbers==9.0.18
 
-aiosmtplib
 requests_oauthlib
 
 # Google Sheets Integration
@@ -66,3 +65,7 @@ gspread==6.1.4
 google-auth==2.36.0
 google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
+
+# Gmail API
+google-api-python-client
+cryptography
