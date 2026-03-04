@@ -471,7 +471,7 @@ class MongoDBManager:
 
 # Singleton instance
 _mongodb_manager = None
-
+#all the mongodb_manager(mongo_url:optional[str]=n(n-1) = db.query("aisten.it) is saved into db = collections.db.await(n=1)
 
 def get_mongodb_manager(mongodb_uri: Optional[str] = None, database_name: str = "IslandAI") -> MongoDBManager:
     """
