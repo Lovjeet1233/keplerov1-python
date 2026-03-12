@@ -197,6 +197,11 @@ async def authorize(redirect_url: Optional[str] = None):
         }
         if redirect_url:
             state_data['redirect_url'] = redirect_url
+
+        # Persist PKCE code_verifier so the callback flow can use it
+        code_verifier = getattr(flow, 'code_verifier', None)
+        if code_verifier:
+            state_data['code_verifier'] = code_verifier
             
         _collection.update_one(
             {'_id': 'oauth_state'},
@@ -227,10 +232,11 @@ async def oauth2callback(code: str, state: Optional[str] = None):
         # Relax token scope validation (allows Google to return additional granted scopes)
         os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
         
-        # Retrieve stored state and redirect_url from MongoDB
+        # Retrieve stored state, redirect_url, and PKCE code_verifier from MongoDB
         state_doc = _collection.find_one({'_id': 'oauth_state'})
         stored_state = state_doc.get('state') if state_doc else None
         redirect_url = state_doc.get('redirect_url') if state_doc else None
+        code_verifier = state_doc.get('code_verifier') if state_doc else None
         
         # Create flow with or without state validation
         if stored_state and state and stored_state == state:
@@ -246,7 +252,11 @@ async def oauth2callback(code: str, state: Optional[str] = None):
                 scopes=SCOPES,
                 redirect_uri=REDIRECT_URI
             )
-        
+
+        # Restore the PKCE code_verifier so Google can validate the token exchange
+        if code_verifier:
+            flow.code_verifier = code_verifier
+
         flow.fetch_token(code=code)
         credentials = flow.credentials
         
