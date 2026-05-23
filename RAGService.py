@@ -3,32 +3,34 @@ import pdfplumber
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Union
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-import numpy as np
-import faiss
-import pickle
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct, PayloadSchemaType
+import uuid
 import asyncio
+import aiohttp
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from functools import lru_cache
-import hashlib
+from qdrant_client.http import models as rest
+
 
 
 class RAGService:
     """
-    RAG Service using FAISS for fast vector search with data ingestion capabilities.
+    RAG Service for chatbot with data ingestion and retrieval capabilities.
     """
     
-    def __init__(self, openai_api_key: str, index_path: str = "./faiss_index"):
+    def __init__(self, qdrant_url: str, qdrant_api_key: str, openai_api_key: str):
         """
-        Initialize RAG Service with FAISS and OpenAI credentials.
+        Initialize RAG Service with Qdrant and OpenAI credentials.
         
         Args:
+            qdrant_url: URL for Qdrant instance
+            qdrant_api_key: API key for Qdrant
             openai_api_key: API key for OpenAI
-            index_path: Directory path to store FAISS index and metadata
         """
+        self.qdrant_client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
@@ -36,102 +38,17 @@ class RAGService:
             length_function=len
         )
         self.executor = ThreadPoolExecutor(max_workers=5)
-        
-        # FAISS setup
-        self.index_path = Path(index_path)
-        self.index_path.mkdir(parents=True, exist_ok=True)
-        
-        self.index = None  # FAISS index
-        self.metadata = []  # List of dicts with text, collection, chunk_index
-        self.dimension = 1536  # OpenAI embedding dimension
-        
-        # Load existing index if available
-        self._load_index()
-    
-    def _load_index(self):
-        """Load FAISS index and metadata from disk if they exist."""
-        index_file = self.index_path / "faiss.index"
-        metadata_file = self.index_path / "metadata.pkl"
-        
-        if index_file.exists() and metadata_file.exists():
-            try:
-                self.index = faiss.read_index(str(index_file))
-                with open(metadata_file, 'rb') as f:
-                    self.metadata = pickle.load(f)
-                print(f"✓ Loaded FAISS index with {len(self.metadata)} vectors")
-            except Exception as e:
-                print(f"Warning: Could not load existing index: {e}")
-                self._initialize_index()
-        else:
-            self._initialize_index()
-    
-    def _initialize_index(self):
-        """Initialize a new FAISS index."""
-        # Use IndexFlatIP for cosine similarity (after L2 normalization)
-        # For better performance with large datasets, consider IndexIVFFlat
-        self.index = faiss.IndexFlatIP(self.dimension)
-        self.metadata = []
-        print("✓ Initialized new FAISS index")
-    
-    def _save_index(self):
-        """Save FAISS index and metadata to disk."""
-        try:
-            index_file = self.index_path / "faiss.index"
-            metadata_file = self.index_path / "metadata.pkl"
-            
-            faiss.write_index(self.index, str(index_file))
-            with open(metadata_file, 'wb') as f:
-                pickle.dump(self.metadata, f)
-            print(f"✓ Saved FAISS index with {len(self.metadata)} vectors")
-        except Exception as e:
-            print(f"Error saving index: {e}")
-    
-    def _get_query_cache_key(self, query: str) -> str:
-        """Generate cache key for query embedding"""
-        return hashlib.md5(query.encode()).hexdigest()
-    
-    @lru_cache(maxsize=1000)
-    def _cached_embed_query(self, query_hash: str, query: str) -> tuple:
-        """
-        Cache query embeddings to avoid recomputation.
-        Uses LRU cache with 1000 most recent queries.
-        
-        Args:
-            query_hash: Hash of the query for cache key
-            query: The actual query text
-            
-        Returns:
-            Tuple of embedding values (hashable for caching)
-        """
-        embedding = self.embeddings.embed_query(query)
-        return tuple(embedding)  # Convert to tuple for caching
-    
-    def embed_texts_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
-        """
-        Embed multiple texts in batches for better performance.
-        Uses OpenAI's batch embedding API which is more efficient than individual calls.
-        
-        Args:
-            texts: List of texts to embed
-            batch_size: Number of texts to embed in each batch
-            
-        Returns:
-            List of embeddings
-        """
-        all_embeddings = []
-        
-        # Process in batches
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            # Use OpenAI's batch embedding (more efficient than individual calls)
-            batch_embeddings = self.embeddings.embed_documents(batch)
-            all_embeddings.extend(batch_embeddings)
-            print(f"✓ Embedded batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1} ({len(batch)} texts)")
-        
-        return all_embeddings
     
     def data_ingestion_pdf(self, pdf_path: str) -> str:
-        """Extract text from PDF files using pdfplumber."""
+        """
+        Extract text from PDF files using pdfplumber.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Extracted text from the PDF
+        """
         text = ""
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -144,16 +61,28 @@ class RAGService:
             raise Exception(f"Error reading PDF: {str(e)}")
     
     def data_ingestion_websites(self, url: str) -> str:
-        """Extract text from websites using BeautifulSoup."""
+        """
+        Extract text from websites using BeautifulSoup.
+        
+        Args:
+            url: URL of the website
+            
+        Returns:
+            Extracted text from the website
+        """
         try:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
             
+            # Remove script and style elements
             for script in soup(["script", "style"]):
                 script.decompose()
             
+            # Get text
             text = soup.get_text()
+            
+            # Clean up text
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = '\n'.join(chunk for chunk in chunks if chunk)
@@ -163,7 +92,15 @@ class RAGService:
             raise Exception(f"Error fetching website: {str(e)}")
     
     def data_ingestion_excel(self, excel_path: str) -> str:
-        """Extract text from Excel files using pandas."""
+        """
+        Extract text from Excel files using pandas.
+        
+        Args:
+            excel_path: Path to the Excel file
+            
+        Returns:
+            Extracted text from the Excel file
+        """
         try:
             df = pd.read_excel(excel_path)
             text = df.to_string(index=False)
@@ -171,7 +108,152 @@ class RAGService:
         except Exception as e:
             raise Exception(f"Error reading Excel: {str(e)}")
     
-    def load_data(
+    def create_collection(self, collection_name: str):
+        """
+        Create a collection in Qdrant with vector_size 1536 and cosine metric.
+        Also creates a payload index on 'source_collection' field for efficient filtering.
+        
+        Args:
+            collection_name: Name of the collection to create
+        """
+        try:
+            # Check if collection already exists
+            collections = self.qdrant_client.get_collections().collections
+            if any(col.name == collection_name for col in collections):
+                print(f"Collection {collection_name} already exists.")
+                # Ensure the index exists even if collection exists
+                self._ensure_source_collection_index(collection_name)
+                return
+            
+            self.qdrant_client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=1536, distance=Distance.COSINE)
+            )
+            print(f"Collection {collection_name} created successfully.")
+            
+            # Create payload index for source_collection field
+            self._ensure_source_collection_index(collection_name)
+            
+        except Exception as e:
+            raise Exception(f"Error creating collection: {str(e)}")
+    
+    def _ensure_source_collection_index(self, collection_name: str):
+        """
+        Ensure that the 'source_collection' field has a keyword index for efficient filtering.
+        
+        Args:
+            collection_name: Name of the collection
+        """
+        try:
+            self.qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name="source_collection",
+                field_schema=PayloadSchemaType.KEYWORD
+            )
+            print(f"Created payload index on 'source_collection' for collection {collection_name}")
+        except Exception as e:
+            # Index might already exist, which is fine
+            if "already exists" in str(e).lower():
+                print(f"Payload index on 'source_collection' already exists for collection {collection_name}")
+            else:
+                print(f"Warning: Could not create payload index: {str(e)}")
+    
+    def delete_collection(self, collection_name: str):
+        """
+        Delete a logical collection by removing all points with matching source_collection metadata.
+        
+        Args:
+            collection_name: Name of the logical collection to delete
+        """
+        try:
+            qdrant_collection = "main_collection"
+            
+            # Delete all points with matching source_collection
+            self.qdrant_client.delete(
+                collection_name=qdrant_collection,
+                points_selector=rest.FilterSelector(
+                    filter=rest.Filter(
+                        must=[
+                            rest.FieldCondition(
+                                key="source_collection",
+                                match=rest.MatchValue(value=collection_name)
+                            )
+                        ]
+                    )
+                )
+            )
+            print(f"Logical collection '{collection_name}' deleted successfully from {qdrant_collection}.")
+        except Exception as e:
+            raise Exception(f"Error deleting collection: {str(e)}")
+    
+    def get_stats(self):
+        """
+        Get statistics about logical collections stored in the main Qdrant collection.
+        
+        Returns:
+            Dictionary with collection names and their document counts
+        """
+        try:
+            qdrant_collection = "main_collection"
+            
+            # Check if collection exists
+            collections = self.qdrant_client.get_collections().collections
+            if not any(col.name == qdrant_collection for col in collections):
+                return {"collections": {}}
+            
+            # Get all points with their source_collection metadata
+            # Use scroll to get all points efficiently
+            collection_counts = {}
+            offset = None
+            
+            while True:
+                records, offset = self.qdrant_client.scroll(
+                    collection_name=qdrant_collection,
+                    limit=100,
+                    offset=offset,
+                    with_payload=["source_collection"],
+                    with_vectors=False
+                )
+                
+                if not records:
+                    break
+                
+                for record in records:
+                    source_collection = record.payload.get("source_collection", "unknown")
+                    collection_counts[source_collection] = collection_counts.get(source_collection, 0) + 1
+                
+                if offset is None:
+                    break
+            
+            return {"collections": collection_counts}
+            
+        except Exception as e:
+            raise Exception(f"Error getting stats: {str(e)}")
+    
+    def ensure_payload_indexes(self, collection_name: str = "main_collection"):
+        """
+        Ensure all required payload indexes exist on the collection.
+        This is useful for fixing existing collections that don't have the indexes.
+        
+        Args:
+            collection_name: Name of the collection (default: "main_collection")
+        
+        Returns:
+            Dictionary with status information
+        """
+        try:
+            # Ensure source_collection index exists
+            self._ensure_source_collection_index(collection_name)
+            
+            return {
+                "status": "success",
+                "message": f"Payload indexes ensured for collection '{collection_name}'",
+                "indexes_created": ["source_collection"]
+            }
+        except Exception as e:
+            raise Exception(f"Error ensuring payload indexes: {str(e)}")
+    
+    def load_data_to_qdrant(
         self,
         collection_name: str,
         url_link: Optional[str] = None,
@@ -179,306 +261,247 @@ class RAGService:
         excel_file: Optional[str] = None
     ):
         """
-        Load data into FAISS index.
+        Load data into Qdrant using OpenAI Embeddings and recursive text splitter.
         
         Args:
-            collection_name: Logical collection name for grouping
+            collection_name: Name of the collection
             url_link: URL to scrape (optional)
             pdf_file: Path to PDF file (optional)
             excel_file: Path to Excel file (optional)
         """
         try:
+            # Ensure collection exists
+            self.create_collection(collection_name)
+            
             # Extract text based on source type
             text = ""
-            source_info = ""
             if url_link:
                 text = self.data_ingestion_websites(url_link)
-                source_info = f"URL: {url_link}"
             elif pdf_file:
                 text = self.data_ingestion_pdf(pdf_file)
-                source_info = f"PDF: {pdf_file}"
             elif excel_file:
                 text = self.data_ingestion_excel(excel_file)
-                source_info = f"Excel: {excel_file}"
             else:
                 raise ValueError("At least one data source must be provided")
             
             # Split text into chunks
             chunks = self.text_splitter.split_text(text)
             
-            # Generate embeddings
-            embeddings_list = []
-            for chunk in chunks:
-                embedding = self.embeddings.embed_query(chunk)
-                embeddings_list.append(embedding)
-            
-            # Convert to numpy array and normalize for cosine similarity
-            vectors = np.array(embeddings_list, dtype=np.float32)
-            faiss.normalize_L2(vectors)  # Normalize for cosine similarity
-            
-            # Add to FAISS index
-            self.index.add(vectors)
-            
-            # Store metadata
+            # Generate embeddings and prepare points
+            points = []
             for i, chunk in enumerate(chunks):
-                self.metadata.append({
-                    "text": chunk,
-                    "collection": collection_name,
-                    "chunk_index": i,
-                    "source": source_info
-                })
+                embedding = self.embeddings.embed_query(chunk)
+                point = PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload={"text": chunk, "chunk_index": i}
+                )
+                points.append(point)
             
-            # Save index
-            self._save_index()
+            # Upload to Qdrant
+            self.qdrant_client.upsert(
+                collection_name=collection_name,
+                points=points
+            )
             
-            print(f"✓ Loaded {len(chunks)} chunks from {source_info} to collection '{collection_name}'")
+            print(f"Successfully loaded {len(chunks)} chunks to collection {collection_name}")
             return {"status": "success", "chunks_loaded": len(chunks)}
         
         except Exception as e:
-            raise Exception(f"Error loading data: {str(e)}")
+            raise Exception(f"Error loading data to Qdrant: {str(e)}")
     
-    async def load_data_async(
-        self,
-        collection_name: str,
-        url_links: Optional[List[str]] = None,
-        pdf_files: Optional[List[str]] = None,
-        excel_files: Optional[List[str]] = None
-    ):
+
+    def retrieval_based_search(self, query: str, collections: Optional[List[str]] = None, top_k: int = 5):
         """
-        Load data from multiple sources asynchronously.
-        
-        Args:
-            collection_name: Logical collection name for grouping
-            url_links: List of URLs to scrape (optional)
-            pdf_files: List of PDF file paths (optional)
-            excel_files: List of Excel file paths (optional)
-        """
-        try:
-            tasks = []
-            source_types = []
-            
-            if url_links:
-                for url in url_links:
-                    tasks.append(self.async_data_ingestion_websites(url))
-                    source_types.append(f"URL: {url}")
-            
-            if pdf_files:
-                for pdf in pdf_files:
-                    tasks.append(self.async_data_ingestion_pdf(pdf))
-                    source_types.append(f"PDF: {pdf}")
-            
-            if excel_files:
-                for excel in excel_files:
-                    tasks.append(self.async_data_ingestion_excel(excel))
-                    source_types.append(f"Excel: {excel}")
-            
-            if not tasks:
-                raise ValueError("At least one data source must be provided")
-            
-            print(f"Starting parallel ingestion of {len(tasks)} sources...")
-            texts = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            all_chunks = []
-            all_chunk_texts = []  # For batch embedding
-            successful_sources = []
-            failed_sources = []
-            
-            for text, source_type in zip(texts, source_types):
-                if isinstance(text, Exception):
-                    print(f"Failed to ingest {source_type}: {str(text)}")
-                    failed_sources.append({"source": source_type, "error": str(text)})
-                    continue
-                
-                chunks = self.text_splitter.split_text(text)
-                
-                # Store chunks for batch embedding
-                for chunk in chunks:
-                    all_chunk_texts.append(chunk)
-                    all_chunks.append({
-                        "text": chunk,
-                        "collection": collection_name,
-                        "source": source_type
-                    })
-                
-                successful_sources.append({"source": source_type, "chunks": len(chunks)})
-                print(f"✓ Extracted {len(chunks)} chunks from {source_type}")
-            
-            if not all_chunks:
-                raise Exception("No data extracted from any source")
-            
-            # OPTIMIZATION: Batch embed all chunks at once (much faster!)
-            print(f"Generating embeddings for {len(all_chunk_texts)} chunks in batches...")
-            all_embeddings = self.embed_texts_batch(all_chunk_texts, batch_size=100)
-            
-            # Convert to numpy array and normalize
-            vectors = np.array(all_embeddings, dtype=np.float32)
-            faiss.normalize_L2(vectors)
-            
-            # Add to FAISS index
-            self.index.add(vectors)
-            
-            # Add metadata with chunk indices
-            for i, chunk_meta in enumerate(all_chunks):
-                self.metadata.append({
-                    "text": chunk_meta["text"],
-                    "collection": chunk_meta["collection"],
-                    "chunk_index": i,
-                    "source": chunk_meta["source"]
-                })
-            
-            # Save index
-            self._save_index()
-            
-            print(f"✓ Loaded {len(all_chunks)} total chunks to collection '{collection_name}'")
-            
-            return {
-                "status": "success",
-                "total_chunks_loaded": len(all_chunks),
-                "sources_processed": len(successful_sources),
-                "sources_failed": len(failed_sources),
-                "successful_sources": successful_sources,
-                "failed_sources": failed_sources if failed_sources else None
-            }
-        
-        except Exception as e:
-            raise Exception(f"Error loading data: {str(e)}")
-    
-    async def async_data_ingestion_pdf(self, pdf_path: str) -> str:
-        """Async PDF ingestion."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, self.data_ingestion_pdf, pdf_path)
-    
-    async def async_data_ingestion_websites(self, url: str) -> str:
-        """Async website ingestion."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, self.data_ingestion_websites, url)
-    
-    async def async_data_ingestion_excel(self, excel_path: str) -> str:
-        """Async Excel ingestion."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, self.data_ingestion_excel, excel_path)
-    
-    def retrieval_based_search(
-        self, 
-        query: str, 
-        collections: Optional[List[str]] = None, 
-        top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Search for relevant documents using FAISS with query caching.
+        Search for relevant documents across multiple logical collections or all documents.
+        All data is stored in a single Qdrant collection "main_collection" with 
+        "source_collection" metadata to differentiate logical collections.
         
         Args:
             query: Search query
-            collections: List of collection names to filter by (optional)
+            collections: List of logical collection names to search in. 
+                        If None or empty, searches ALL documents in main_collection.
             top_k: Number of top results to return
             
         Returns:
             List of search results with text, score, collection, and chunk_index
         """
-        import time as perf_time
-        
         try:
-            if self.index.ntotal == 0:
-                print("Warning: Index is empty")
-                return []
-            
-            # OPTIMIZATION: Use cached embedding for repeated queries
-            embed_start = perf_time.time()
-            query_hash = self._get_query_cache_key(query)
-            query_embedding = list(self._cached_embed_query(query_hash, query))
-            query_vector = np.array([query_embedding], dtype=np.float32)
-            faiss.normalize_L2(query_vector)
-            embed_time = (perf_time.time() - embed_start) * 1000
-            
-            # Search FAISS index (get more results for filtering)
-            search_start = perf_time.time()
-            search_k = min(top_k * 10, self.index.ntotal) if collections else top_k
-            distances, indices = self.index.search(query_vector, search_k)
-            search_time = (perf_time.time() - search_start) * 1000
-            
-            print(f"⏱️ SEARCH: Embedding={embed_time:.0f}ms, FAISS={search_time:.0f}ms")
-            
-            # Prepare results
+            query_embedding = self.embeddings.embed_query(query)
+
+            # Build filter only if specific collections are requested
+            qdrant_filter = None
+            if collections and len(collections) > 0:
+                qdrant_filter = rest.Filter(
+                    must=[
+                        rest.FieldCondition(
+                            key="source_collection",
+                            match=rest.MatchAny(any=collections)
+                        )
+                    ]
+                )
+
+            search_results = self.qdrant_client.search(
+                collection_name="main_collection",  # single Qdrant collection
+                query_vector=query_embedding,
+                limit=top_k,
+                query_filter=qdrant_filter  # None = search all documents
+            )
+
             results = []
-            for dist, idx in zip(distances[0], indices[0]):
-                if idx == -1:  # FAISS returns -1 for empty results
-                    continue
-                
-                meta = self.metadata[idx]
-                
-                # Filter by collection if specified
-                if collections and meta["collection"] not in collections:
-                    continue
-                
+            for result in search_results:
                 results.append({
-                    "text": meta["text"],
-                    "score": float(dist),  # Cosine similarity score
-                    "collection": meta["collection"],
-                    "chunk_index": meta["chunk_index"],
-                    "source": meta.get("source", "unknown")
+                    "text": result.payload.get("text", ""),
+                    "score": result.score,
+                    "collection": result.payload.get("source_collection", "unknown"),
+                    "chunk_index": result.payload.get("chunk_index", 0)
                 })
-                
-                # Stop if we have enough results
-                if len(results) >= top_k:
-                    break
-            
+
             return results
-        
+
         except Exception as e:
             raise Exception(f"Error performing search: {str(e)}")
+
     
-    def clear_index(self):
-        """Clear the entire FAISS index and metadata."""
-        self._initialize_index()
-        self._save_index()
-        print("✓ Cleared FAISS index")
-    
-    def delete_collection(self, collection_name: str):
+    async def async_data_ingestion_pdf(self, pdf_path: str) -> str:
         """
-        Remove all vectors belonging to a specific collection.
-        Note: FAISS doesn't support efficient deletion, so we rebuild the index.
+        Async extract text from PDF files using pdfplumber.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Extracted text from the PDF
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self.data_ingestion_pdf, pdf_path)
+    
+    async def async_data_ingestion_websites(self, url: str) -> str:
+        """
+        Async extract text from websites using BeautifulSoup.
+        
+        Args:
+            url: URL of the website
+            
+        Returns:
+            Extracted text from the website
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self.data_ingestion_websites, url)
+    
+    async def async_data_ingestion_excel(self, excel_path: str) -> str:
+        """
+        Async extract text from Excel files using pandas.
+        
+        Args:
+            excel_path: Path to the Excel file
+            
+        Returns:
+            Extracted text from the Excel file
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self.data_ingestion_excel, excel_path)
+ 
+
+    async def load_data_to_qdrant_async(
+        self,
+        logical_collection_name: str,       # rename: this is NOT Qdrant collection
+        url_links: Optional[List[str]] = None,
+        pdf_files: Optional[List[str]] = None,
+        excel_files: Optional[List[str]] = None
+    ):
+        """
+        Load data into ONE Qdrant collection but keep logical separation using metadata.
+
+        Args:
+            logical_collection_name: User-defined logical group (e.g., "finance_docs")
+            url_links: List of URLs to scrape (optional)
+            pdf_files: List of PDF file paths (optional)
+            excel_files: List of Excel file paths (optional)
+
+        Returns:
+            Dictionary with ingestion results
         """
         try:
-            # Filter out metadata for this collection
-            remaining_metadata = [m for m in self.metadata if m["collection"] != collection_name]
-            removed_count = len(self.metadata) - len(remaining_metadata)
-            
-            if removed_count == 0:
-                print(f"No data found for collection '{collection_name}'")
-                return
-            
-            # Rebuild index with remaining data
-            self._initialize_index()
-            
-            if remaining_metadata:
-                # Re-embed and add remaining chunks
-                vectors = []
-                for meta in remaining_metadata:
-                    embedding = self.embeddings.embed_query(meta["text"])
-                    vectors.append(embedding)
-                
-                vectors = np.array(vectors, dtype=np.float32)
-                faiss.normalize_L2(vectors)
-                self.index.add(vectors)
-            
-            self.metadata = remaining_metadata
-            self._save_index()
-            
-            print(f"✓ Removed {removed_count} chunks from collection '{collection_name}'")
-            
+            # Always use single Qdrant collection
+            qdrant_collection = "main_collection"
+            self.create_collection(qdrant_collection)
+
+            tasks = []
+            source_types = []
+
+            if url_links:
+                for url in url_links:
+                    tasks.append(self.async_data_ingestion_websites(url))
+                    source_types.append(f"URL: {url}")
+
+            if pdf_files:
+                for pdf in pdf_files:
+                    tasks.append(self.async_data_ingestion_pdf(pdf))
+                    source_types.append(f"PDF: {pdf}")
+
+            if excel_files:
+                for excel in excel_files:
+                    tasks.append(self.async_data_ingestion_excel(excel))
+                    source_types.append(f"Excel: {excel}")
+
+            if not tasks:
+                raise ValueError("At least one data source must be provided")
+
+            print(f"Starting parallel ingestion of {len(tasks)} sources...")
+            texts = await asyncio.gather(*tasks, return_exceptions=True)
+
+            all_chunks = []
+            successful_sources = []
+            failed_sources = []
+
+            for text, source_type in zip(texts, source_types):
+                if isinstance(text, Exception):
+                    print(f"Failed to ingest {source_type}: {str(text)}")
+                    failed_sources.append({"source": source_type, "error": str(text)})
+                    continue
+
+                chunks = self.text_splitter.split_text(text)
+                all_chunks.extend(chunks)
+                successful_sources.append({"source": source_type, "chunks": len(chunks)})
+                print(f"Extracted {len(chunks)} chunks from {source_type}")
+
+            if not all_chunks:
+                raise Exception("No data extracted from any source")
+
+            print(f"Generating embeddings for {len(all_chunks)} chunks...")
+
+            points = []
+            for i, chunk in enumerate(all_chunks):
+                embedding = self.embeddings.embed_query(chunk)
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=embedding,
+                        payload={
+                            "text": chunk,
+                            "chunk_index": i,
+                            "source_collection": logical_collection_name     # << ADD THIS
+                        }
+                    )
+                )
+
+            # Upload to Qdrant
+            self.qdrant_client.upsert(
+                collection_name=qdrant_collection,
+                points=points
+            )
+
+            print(f"Uploaded {len(points)} chunks into Qdrant under group '{logical_collection_name}'")
+
+            return {
+                "status": "success",
+                "total_chunks_loaded": len(points),
+                "sources_processed": len(successful_sources),
+                "sources_failed": len(failed_sources),
+                "successful_sources": successful_sources,
+                "failed_sources": failed_sources if failed_sources else None
+            }
+
         except Exception as e:
-            raise Exception(f"Error deleting collection: {str(e)}")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get statistics about the current index."""
-        collections = {}
-        for meta in self.metadata:
-            coll = meta["collection"]
-            collections[coll] = collections.get(coll, 0) + 1
-        
-        return {
-            "total_vectors": self.index.ntotal,
-            "dimension": self.dimension,
-            "collections": collections,
-            "index_path": str(self.index_path)
-        }
+            raise Exception(f"Error loading data to Qdrant: {str(e)}")

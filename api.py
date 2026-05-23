@@ -54,8 +54,8 @@ except Exception as e:
 # Initialize RAG Service with config
 try:
     rag_service = RAGService(
-        # qdrant_url=config.QDRANT_URL,
-        # qdrant_api_key=config.QDRANT_API_KEY,
+        qdrant_url=config.QDRANT_URL,
+        qdrant_api_key=config.QDRANT_API_KEY,
         openai_api_key=config.OPENAI_API_KEY
     )
     log_info("RAG Service initialized successfully")

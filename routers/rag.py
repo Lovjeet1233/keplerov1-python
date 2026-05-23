@@ -422,9 +422,9 @@ async def data_ingestion(
         total_sources = len(urls) + len(pdf_paths) + len(excel_paths)
         log_info(f"Starting parallel ingestion of {total_sources} source(s)...")
         
-        # Use async method for parallel ingestion (FAISS-based)
-        result = await rag_service.load_data_async(
-            collection_name=collection_name,
+        # Use async method for parallel ingestion (Qdrant-based)
+        result = await rag_service.load_data_to_qdrant_async(
+            logical_collection_name=collection_name,
             url_links=urls if urls else None,
             pdf_files=pdf_paths if pdf_paths else None,
             excel_files=excel_paths if excel_paths else None
