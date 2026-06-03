@@ -13,6 +13,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 from langchain_openai import ChatOpenAI
 from config.prompt import ESCALATION_EVAL_PROMPT
+from database.tool_store import get_tool_store
+from services.registered_tools import build_registered_email_tools, build_tool_system_prompt
 from utils.logger import log_info, log_error, log_exception
 from model import (
     ChatRequest,
@@ -279,9 +281,24 @@ async def chat(request: ChatRequest):
             except Exception as e:
                 log_error(f"Failed to initialize ecommerce client: {e}")
         
-        # Initialize email tool if credentials are provided
+        # Initialize email tools from MongoDB templates (user_id) or generic send_email
         email_tools = []
-        if request.email_credentials:
+        user_tools = {}
+        if request.user_id:
+            user_tools = get_tool_store().get_tools_by_user_id(request.user_id)
+            log_info(
+                f"Loaded {len(user_tools)} registered tool(s) for user_id={request.user_id}"
+            )
+            if request.email_credentials and user_tools:
+                email_tools = build_registered_email_tools(
+                    user_tools=user_tools,
+                    email_base_url=request.email_credentials.base_url,
+                    x_user_email=request.email_credentials.x_user_email,
+                )
+                log_info(f"Created {len(email_tools)} registered email tool(s) from MongoDB templates")
+            elif request.email_credentials and not user_tools:
+                log_info(f"No registered tools found for user_id={request.user_id}")
+        elif request.email_credentials:
             try:
                 email_base_url = request.email_credentials.base_url
                 x_user_email = request.email_credentials.x_user_email
@@ -326,7 +343,7 @@ async def chat(request: ChatRequest):
                     return run_sync()
                 
                 email_tools = [send_email]
-                log_info(f"✓ Email tool created with @tool decorator")
+                log_info(f"✓ Generic email tool created with @tool decorator")
                 log_info(f"  - send_email: {send_email.name}")
                 log_info(f"  - x_user_email: {x_user_email}")
             except Exception as e:
@@ -351,6 +368,8 @@ async def chat(request: ChatRequest):
         # Run the RAG workflow (retrieve + generate) with multiple collections support
         
         enhanced_system_prompt = request.system_prompt or ""
+        if user_tools and not request.email_credentials:
+            enhanced_system_prompt += "\n\n" + build_tool_system_prompt(user_tools)
         if request.escalation_prompt:
             enhanced_system_prompt += (
                 f"\n\nEscalation Condition: {request.escalation_prompt}. "

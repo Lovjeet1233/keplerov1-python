@@ -16,7 +16,8 @@ from routers.rag import router as rag_router, init_rag_router
 from routers.llm import router as llm_router, init_llm_router
 from routers.sms import router as sms_router
 from routers.email import router as email_router
-from routers.tools import router as tools_router
+from routers.tools import router as tools_router, init_tools_router
+from database.tool_store import get_tool_store
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -78,6 +79,19 @@ try:
     log_info("LLM Service initialized successfully")
 except Exception as e:
     log_error(f"Failed to initialize LLM Service: {str(e)}")
+    raise
+
+# Initialize Tool Store (MongoDB-backed registered tools)
+try:
+    tool_store = get_tool_store(
+        mongodb_uri=config.MONGODB_URI,
+        database_name=config.TOOLS_DB_NAME,
+        collection_name=config.TOOLS_COLLECTION_NAME,
+    )
+    init_tools_router(tool_store)
+    log_info("Tool Store initialized successfully")
+except Exception as e:
+    log_error(f"Failed to initialize Tool Store: {str(e)}")
     raise
 
 # Initialize routers with service instances

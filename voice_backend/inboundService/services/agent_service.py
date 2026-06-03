@@ -76,7 +76,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://keplerov1-python-2.onrender.co
 GMAIL_USER_EMAIL = os.getenv("GMAIL_USER_EMAIL", "")  # Authorized Gmail address
 
 # Global Caches
-_TOOLS_CACHE = None
+_TOOLS_CACHE = {}
 
 # Global Async MongoDB Client
 _mongo_client = None
@@ -97,20 +97,21 @@ logger = logging.getLogger("optimized_inbound_agent")
 
 # --- Utilities ---
 
-async def load_registered_tools_async() -> Dict[str, Any]:
-    """Asynchronous loading of tools.json."""
-    global _TOOLS_CACHE
-    if _TOOLS_CACHE is not None:
-        return _TOOLS_CACHE
-    
-    tools_file = Path(__file__).parent.parent.parent.parent / "tools.json"
+async def load_registered_tools_async(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Load registered tools for a user from MongoDB."""
+    if not user_id:
+        return {}
+
+    if user_id in _TOOLS_CACHE:
+        return _TOOLS_CACHE[user_id]
+
     try:
-        if tools_file.exists():
-            content = await asyncio.to_thread(tools_file.read_text, encoding='utf-8')
-            _TOOLS_CACHE = json.loads(content)
-            return _TOOLS_CACHE
+        from database.tool_store import get_tool_store
+        tools = get_tool_store().get_tools_by_user_id(user_id)
+        _TOOLS_CACHE[user_id] = tools
+        return tools
     except Exception as e:
-        logger.error(f"Error loading tools: {e}")
+        logger.error(f"Error loading tools from MongoDB: {e}")
     return {}
 
 async def send_gmail_email_async(
@@ -301,7 +302,7 @@ class Assistant(Agent):
             caller_email: The caller's email address (REQUIRED - ask the caller)
             caller_phone: The caller's phone number (optional - ask the caller)
         """
-        tools = await load_registered_tools_async()
+        tools = await load_registered_tools_async(self.agent_config.get("user_id"))
         tool = next((t for tid, t in tools.items() if t.get("tool_name") == tool_name), None)
         if not tool or tool.get("tool_type") != "email": 
             logger.error(f"Tool not found or not email type: {tool_name}")
@@ -622,7 +623,8 @@ async def entrypoint(ctx: agents.JobContext):
         full_instructions += f"\n\nEscalation Condition: {escalation_condition}. When this condition is met, use the transfer_to_human tool to transfer the call."
     
     # Load registered tools and add their descriptions to instructions
-    registered_tools = await load_registered_tools_async()
+    user_id = agent_config.get("user_id")
+    registered_tools = await load_registered_tools_async(user_id)
     if registered_tools:
         tool_descriptions = []
         for tool_id, tool_config in registered_tools.items():
