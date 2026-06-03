@@ -3,6 +3,7 @@ RAG-related API endpoints
 """
 
 import os
+import json
 import tempfile
 import shutil
 import asyncio
@@ -10,6 +11,8 @@ import time
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
+from langchain_openai import ChatOpenAI
+from config.prompt import ESCALATION_EVAL_PROMPT
 from utils.logger import log_info, log_error, log_exception
 from model import (
     ChatRequest,
@@ -58,9 +61,7 @@ async def _manage_chatbot_instance_async(mongodb_manager, instance_id: str, requ
     try:
         existing_instance = mongodb_manager.get_chatbot_instance(instance_id)
         if not existing_instance:
-            collection_info = request.collection_name or (
-                ",".join(collections) if collections else "all"
-            )
+            collection_info = ",".join(collections) if collections else "all"
             mongodb_manager.create_chatbot_instance(
                 instance_id=instance_id,
                 collection_name=collection_info,
@@ -80,9 +81,53 @@ async def _manage_chatbot_instance_async(mongodb_manager, instance_id: str, requ
         log_error(f"Error managing chatbot instance (background): {str(e)}")
 
 
+def _evaluate_escalation(
+    query: str,
+    answer: str,
+    escalation_prompt: str,
+    conversation_history: Optional[list] = None,
+    api_key: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """Check whether the escalation condition is met for the current turn."""
+    history_lines = []
+    for item in (conversation_history or [])[-3:]:
+        history_lines.append(f"User: {item.get('query', '')}")
+        history_lines.append(f"Assistant: {item.get('answer', '')}")
+    history_text = "\n".join(history_lines) if history_lines else "No prior conversation."
+
+    llm = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0,
+        openai_api_key=api_key or os.getenv("OPENAI_API_KEY"),
+    )
+    prompt = ESCALATION_EVAL_PROMPT.format(
+        escalation_prompt=escalation_prompt,
+        history=history_text,
+        query=query,
+        answer=answer,
+    )
+
+    try:
+        response = llm.invoke(prompt).content.strip()
+        if response.startswith("```"):
+            response = response.split("```")[1]
+            if response.startswith("json"):
+                response = response[4:]
+            response = response.strip()
+
+        result = json.loads(response)
+        escalated = bool(result.get("escalated", False))
+        reason = result.get("reason") or None
+        return escalated, reason
+    except Exception as e:
+        log_error(f"Escalation evaluation failed: {e}")
+        return False, None
+
+
 async def _store_chat_message_async(mongodb_manager, thread_id: str, instance_id: str, 
                                     query: str, answer: str, retrieved_docs: list,
-                                    collection_name: str, collections: list, top_k: int):
+                                    collection_name: str, collections: list, top_k: int,
+                                    escalated: bool = False, escalation_reason: Optional[str] = None):
     """Background task to store chat message - non-blocking"""
     try:
         mongodb_manager.store_chat_message(
@@ -94,7 +139,9 @@ async def _store_chat_message_async(mongodb_manager, thread_id: str, instance_id
             metadata={
                 "collection_name": collection_name,
                 "collection_names": collections,
-                "top_k": top_k
+                "top_k": top_k,
+                "escalated": escalated,
+                "escalation_reason": escalation_reason,
             }
         )
         log_info(f"Stored chat message in MongoDB for thread: {thread_id}")
@@ -120,6 +167,7 @@ async def chat(request: ChatRequest):
             - top_k: Number of documents to retrieve (default: 5)
             - thread_id: Thread ID for conversation memory (optional)
             - system_prompt: Custom system prompt (optional)
+            - escalation_prompt: Condition for escalating to a human agent (optional)
             - provider: LLM provider ("openai" or "gemini", default: "openai")
             - api_key: Custom API key for the provider (optional, uses default if not provided)
             - ecommerce_credentials: Credentials for ecommerce platform (optional)
@@ -301,17 +349,17 @@ async def chat(request: ChatRequest):
         asyncio.create_task(_manage_chatbot_instance_async(mongodb_manager, instance_id, request, collections))
         
         # Run the RAG workflow (retrieve + generate) with multiple collections support
-        log_info(f"Using provider: {request.provider}, Custom API key provided: {bool(request.api_key)}, Elaborate: {request.elaborate}, Skip history: {request.skip_history}")
         
-        # Add elaboration instruction to system prompt if requested
         enhanced_system_prompt = request.system_prompt or ""
-        if request.elaborate:
-            elaboration_instruction = "\n\nIMPORTANT: Provide detailed, elaborate responses with comprehensive explanations. Continue elaborating until the user explicitly says 'don't elaborate' or asks for shorter responses."
-            enhanced_system_prompt += elaboration_instruction
-        
+        if request.escalation_prompt:
+            enhanced_system_prompt += (
+                f"\n\nEscalation Condition: {request.escalation_prompt}. "
+                "When this condition is met, acknowledge the user's concern professionally "
+                "and let them know a human agent will assist them further."
+            )
+
         result = rag_workflow.run(
             query=request.query,
-            collection_name=request.collection_name,  # For backward compatibility
             collection_names=collections,  # New: multiple collections
             top_k=request.top_k,
             thread_id=request.thread_id,
@@ -324,6 +372,19 @@ async def chat(request: ChatRequest):
         
         collection_count = len(collections) if collections else "all"
         log_info(f"Workflow completed - Retrieved {len(result['retrieved_docs'])} documents from {collection_count} collection(s)")
+
+        escalated = False
+        escalation_reason = None
+        if request.escalation_prompt:
+            escalated, escalation_reason = _evaluate_escalation(
+                query=request.query,
+                answer=result["answer"],
+                escalation_prompt=request.escalation_prompt,
+                conversation_history=result.get("conversation_history"),
+                api_key=os.getenv("OPENAI_API_KEY"),
+            )
+            if escalated:
+                log_info(f"Escalation triggered: {escalation_reason}")
         
         # OPTIMIZATION: Store chat message in background (non-blocking)
         asyncio.create_task(_store_chat_message_async(
@@ -333,9 +394,11 @@ async def chat(request: ChatRequest):
             request.query,
             result["answer"],
             result["retrieved_docs"],
-            request.collection_name,
+            ",".join(collections) if collections else None,
             collections,
-            request.top_k
+            request.top_k,
+            escalated,
+            escalation_reason,
         ))
         
         # Calculate latency in milliseconds
@@ -348,7 +411,9 @@ async def chat(request: ChatRequest):
             retrieved_docs=result["retrieved_docs"],
             context=result.get("context"),
             thread_id=result.get("thread_id"),
-            latency_ms=latency_ms
+            latency_ms=latency_ms,
+            escalated=escalated,
+            escalation_reason=escalation_reason,
         )
     
     except Exception as e:

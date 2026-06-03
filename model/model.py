@@ -41,26 +41,18 @@ class EmailToolCredentials(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     query: str
-    collection_name: Optional[str] = None  # Deprecated: single collection (for backward compatibility)
     collection_names: Optional[list[str]] = None  # New: multiple collections support
     top_k: Optional[int] = 5
     thread_id: Optional[str] = None
     system_prompt: Optional[str] = None
-    provider: Optional[str] = "openai"  # "openai" or "gemini"
-    api_key: Optional[str] = None  # Custom API key for the provider
-    elaborate: Optional[bool] = False  # Request detailed/elaborate responses (increases latency)
     skip_history: Optional[bool] = False  # Skip conversation history for faster responses
+    escalation_prompt: Optional[str] = None  # Condition describing when to escalate to a human agent
     ecommerce_credentials: Optional[EcommerceCredentials] = None  # Ecommerce platform credentials for product/order tools
     email_credentials: Optional[EmailToolCredentials] = None  # Email tool credentials for sending emails
     
     def get_collections(self) -> list[str]:
-        """Get list of collections, supporting both single and multiple collection names."""
-        if self.collection_names:
-            return self.collection_names
-        elif self.collection_name:
-            return [self.collection_name]
-        else:
-            return []
+        """Get list of collections from collection_names."""
+        return self.collection_names or []
 
 
 class ChatResponse(BaseModel):
@@ -71,6 +63,8 @@ class ChatResponse(BaseModel):
     context: Optional[str] = None
     thread_id: Optional[str] = None
     latency_ms: Optional[float] = None  # Response time in milliseconds
+    escalated: bool = False  # True when escalation_prompt condition is met
+    escalation_reason: Optional[str] = None  # Why escalation was triggered
 
 
 class DataIngestionRequest(BaseModel):
