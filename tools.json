@@ -1,31 +1,49 @@
 {
-    "4b85bada-408d-413a-a4f9-92568c51e0d0": {
-        "tool_name": "confirm_appoinment",
+    "c5d550e4-ee34-466f-aeea-4fbc6dc93d28": {
+        "tool_name": "confirm_appointment",
         "tool_type": "email",
-        "description": "Send an email to recipients, when user ask for meeting to schedule",
+        "description": "Send a confirmation email when the user has booked an appointment. Before calling this tool, collect the person's full name,email address, appointment date, and appointment time.",
         "schema": {
             "type": "object",
             "properties": {
                 "to": {
                     "type": "string",
-                    "description": "Recipient email address",
+                    "description": "Recipient email address where the appointment confirmation will be sent",
                     "value": "amar_c@me.iitr.ac.in"
                 },
                 "subject": {
                     "type": "string",
-                    "description": "Email subject is by default use below",
-                    "value": "IMPERASOLAR - conferma appuntamento"
+                    "description": "Email subject line. Use {{name}} to insert the person's name.",
+                    "value": "Appointment Confirmation for {{name}}"
                 },
                 "body": {
                     "type": "string",
-                    "description": "Email body content. use default and replace the name and email with the user's name and email",
-                    "value": " You can write {{name}}, {{email}} to insert values that the AI gathered"
+                    "description": "Email body template. Replace {{name}}, {{appointment_date}}, and {{appointment_time}} with values collected from the user.",
+                    "value": "Dear {{name}},\n\nYour appointment has been successfully booked.\n\nAppointment Details:\n- Name: {{name}}\n- Date: {{appointment_date}}\n- Time: {{appointment_time}}\n\nPlease arrive 10 minutes early. If you need to reschedule, reply to this email.\n\nBest regards,\nSupport Team"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Full name of the person who booked the appointment",
+                    "value": ""
+                },
+                "appointment_date": {
+                    "type": "string",
+                    "description": "Date of the appointment (e.g., June 10, 2026 or 2026-06-10)",
+                    "value": ""
+                },
+                "appointment_time": {
+                    "type": "string",
+                    "description": "Time of the appointment (e.g., 3:00 PM or 15:00)",
+                    "value": ""
                 }
             },
             "required": [
                 "to",
                 "subject",
-                "body"
+                "body",
+                "name",
+                "appointment_date",
+                "appointment_time"
             ]
         }
     }

@@ -69,7 +69,7 @@ GMAIL_USER_EMAIL = os.getenv("GMAIL_USER_EMAIL", "")  # Authorized Gmail address
 
 # Global Caches
 _DYNAMIC_CONFIG_CACHE = None
-_TOOLS_CACHE = None
+_TOOLS_CACHE = {}
 _CACHE_TIMESTAMP = 0
 CACHE_TTL = 300  # 5 minutes
 
@@ -128,20 +128,21 @@ async def load_dynamic_config_async() -> Dict[str, Any]:
     
     return _DYNAMIC_CONFIG_CACHE or {}
 
-async def load_registered_tools_async() -> Dict[str, Any]:
-    """Asynchronous loading of tools.json."""
-    global _TOOLS_CACHE
-    if _TOOLS_CACHE is not None:
-        return _TOOLS_CACHE
-    
-    tools_file = Path(__file__).parent.parent.parent.parent / "tools.json"
+async def load_registered_tools_async(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Load registered tools for a user from MongoDB."""
+    if not user_id:
+        return {}
+
+    if user_id in _TOOLS_CACHE:
+        return _TOOLS_CACHE[user_id]
+
     try:
-        if tools_file.exists():
-            content = await asyncio.to_thread(tools_file.read_text, encoding='utf-8')
-            _TOOLS_CACHE = json.loads(content)
-            return _TOOLS_CACHE
+        from database.tool_store import get_tool_store
+        tools = get_tool_store().get_tools_by_user_id(user_id)
+        _TOOLS_CACHE[user_id] = tools
+        return tools
     except Exception as e:
-        logger.error(f"Error loading tools: {e}")
+        logger.error(f"Error loading tools from MongoDB: {e}")
     return {}
 
 async def send_gmail_email_async(
@@ -194,8 +195,14 @@ async def send_gmail_email_async(
 # --- Assistant Class ---
 
 class Assistant(Agent):
-    def __init__(self, instructions: str = None, collection_names: List[str] = None) -> None:
+    def __init__(
+        self,
+        instructions: str = None,
+        collection_names: List[str] = None,
+        user_id: Optional[str] = None,
+    ) -> None:
         self.collection_names = collection_names
+        self.user_id = user_id
         self._agent_session = None  # Will be set when session starts
         openai_api_key = os.getenv("OPENAI_API_KEY")
         self.rag_service = RAGService(openai_api_key=openai_api_key) if openai_api_key else None
@@ -324,7 +331,7 @@ class Assistant(Agent):
             subject: Email subject line (optional, uses tool default if not provided)
             body: Email body content (optional, uses tool default if not provided)
         """
-        tools = await load_registered_tools_async()
+        tools = await load_registered_tools_async(self.user_id)
         tool = next((t for tid, t in tools.items() if t.get("tool_name") == tool_name), None)
         if not tool or tool.get("tool_type") != "email": 
             logger.error(f"Tool not found or not email type: {tool_name}")
@@ -425,11 +432,9 @@ async def entrypoint(ctx: agents.JobContext):
     
     # 1. Parallelize Config & Tools Loading
     config_task = asyncio.create_task(load_dynamic_config_async())
-    tools_task = asyncio.create_task(load_registered_tools_async())
-
-    # 5. Wait for Config
     dynamic_config = await config_task
-    await tools_task
+    user_id = dynamic_config.get("user_id")
+    registered_tools = await load_registered_tools_async(user_id)
     
     # Extract config parameters from MongoDB
     tts_language = dynamic_config.get("tts_language", "en")
@@ -630,7 +635,6 @@ async def entrypoint(ctx: agents.JobContext):
         full_instructions += f"\n\nEscalation Condition: {escalation_condition}. When this condition is met, use the transfer_to_human tool to transfer the call."
     
     # Load registered tools and add their descriptions to instructions
-    registered_tools = await load_registered_tools_async()
     if registered_tools:
         tool_descriptions = []
         for tool_id, tool_config in registered_tools.items():
@@ -661,7 +665,8 @@ async def entrypoint(ctx: agents.JobContext):
     
     assistant = Assistant(
         instructions=full_instructions,
-        collection_names=collection_names
+        collection_names=collection_names,
+        user_id=user_id,
     )
     
     # Set the session reference in the assistant for tool access

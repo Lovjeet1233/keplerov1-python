@@ -3,7 +3,7 @@ Pydantic models for the RAG Service API
 All request and response models are centralized here for better organization and reusability.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 
@@ -41,26 +41,19 @@ class EmailToolCredentials(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     query: str
-    collection_name: Optional[str] = None  # Deprecated: single collection (for backward compatibility)
     collection_names: Optional[list[str]] = None  # New: multiple collections support
     top_k: Optional[int] = 5
     thread_id: Optional[str] = None
     system_prompt: Optional[str] = None
-    provider: Optional[str] = "openai"  # "openai" or "gemini"
-    api_key: Optional[str] = None  # Custom API key for the provider
-    elaborate: Optional[bool] = False  # Request detailed/elaborate responses (increases latency)
     skip_history: Optional[bool] = False  # Skip conversation history for faster responses
+    user_id: Optional[str] = None  # Owner of registered integration tools
+    escalation_prompt: Optional[str] = None  # Condition describing when to escalate to a human agent
     ecommerce_credentials: Optional[EcommerceCredentials] = None  # Ecommerce platform credentials for product/order tools
     email_credentials: Optional[EmailToolCredentials] = None  # Email tool credentials for sending emails
     
     def get_collections(self) -> list[str]:
-        """Get list of collections, supporting both single and multiple collection names."""
-        if self.collection_names:
-            return self.collection_names
-        elif self.collection_name:
-            return [self.collection_name]
-        else:
-            return []
+        """Get list of collections from collection_names."""
+        return self.collection_names or []
 
 
 class ChatResponse(BaseModel):
@@ -71,6 +64,8 @@ class ChatResponse(BaseModel):
     context: Optional[str] = None
     thread_id: Optional[str] = None
     latency_ms: Optional[float] = None  # Response time in milliseconds
+    escalated: bool = False  # True when escalation_prompt condition is met
+    escalation_reason: Optional[str] = None  # Why escalation was triggered
 
 
 class DataIngestionRequest(BaseModel):
@@ -243,6 +238,62 @@ class ToolProperty(BaseModel):
 
 class RegisterToolRequest(BaseModel):
     """Request model for registering a tool."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "user_id": "user_123",
+                "tool_name": "confirm_appointment",
+                "tool_type": "email",
+                "description": "Send a confirmation email when the user has booked an appointment.",
+                "properties": [
+                    {
+                        "name": "to",
+                        "type": "string",
+                        "description": "Recipient email address",
+                        "required": True,
+                        "value": "amar_c@me.iitr.ac.in"
+                    },
+                    {
+                        "name": "subject",
+                        "type": "string",
+                        "description": "Email subject",
+                        "required": True,
+                        "value": "Appointment Confirmation for {{name}}"
+                    },
+                    {
+                        "name": "body",
+                        "type": "string",
+                        "description": "Email body template",
+                        "required": True,
+                        "value": "Dear {{name}},\n\nYour appointment is booked.\n\n- Name: {{name}}\n- Date: {{appointment_date}}\n- Time: {{appointment_time}}"
+                    },
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "description": "Person's full name",
+                        "required": True,
+                        "value": ""
+                    },
+                    {
+                        "name": "appointment_date",
+                        "type": "string",
+                        "description": "Appointment date",
+                        "required": True,
+                        "value": ""
+                    },
+                    {
+                        "name": "appointment_time",
+                        "type": "string",
+                        "description": "Appointment time",
+                        "required": True,
+                        "value": ""
+                    }
+                ]
+            }
+        }
+    )
+
+    user_id: str
     tool_name: str
     tool_type: str  # e.g., "email", "sms", "api_call", "database"
     description: str
@@ -254,12 +305,14 @@ class RegisterToolResponse(BaseModel):
     status: str
     message: str
     tool_id: str
+    user_id: str
     tool: dict
 
 
 class DeleteToolRequest(BaseModel):
     """Request model for deleting a tool."""
     tool_id: str
+    user_id: Optional[str] = None
 
 
 class DeleteToolResponse(BaseModel):

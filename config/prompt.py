@@ -15,6 +15,22 @@ RETRIEVAL_PROMPT = """Based on the user's question, retrieve relevant informatio
 
 GENERATION_PROMPT = """Generate a comprehensive answer based on the retrieved context and the user's question."""
 
+ESCALATION_EVAL_PROMPT = """You are an escalation classifier for a customer support chatbot.
+
+Escalation condition (when a human agent should take over):
+{escalation_prompt}
+
+Recent conversation:
+{history}
+
+Latest user message: {query}
+Latest assistant reply: {answer}
+
+Based on the escalation condition, should this conversation be escalated to a human agent now?
+
+Respond with ONLY valid JSON in this exact format:
+{{"escalated": true or false, "reason": "brief explanation"}}"""
+
 
 # Prompt for the elaborate small prompt into precise one
 ELABORATE_PROMPT = """You are an expert prompt engineer. Your task is to take a brief, simple prompt and elaborate it into a more detailed, precise, and actionable prompt.

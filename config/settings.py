@@ -30,6 +30,8 @@ class Config:
         "MONGODB_URI",
         "mongodb+srv://LOVJEET:LOVJEETMONGO@cluster0.zpzj90m.mongodb.net"
     )
+    TOOLS_DB_NAME = os.getenv("TOOLS_DB_NAME", "synervo-python")
+    TOOLS_COLLECTION_NAME = os.getenv("TOOLS_COLLECTION_NAME", "integration-chatbot")
     
     # API Configuration
     API_HOST = os.getenv("API_HOST", "0.0.0.0")
