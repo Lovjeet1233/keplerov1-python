@@ -62,6 +62,16 @@ from .model import (
     SetupInboundSIPResponse,
 )
 
+from .tool_assignment_models import (
+    AssignToolRequest,
+    UpdateAssignmentRequest,
+    AssignToolResponse,
+    DeleteAssignmentRequest,
+    DeleteAssignmentResponse,
+    BulkEnableToolsRequest,
+    BulkEnableToolsResponse,
+)
+
 __all__ = [
     # Common
     "StatusResponse",
@@ -120,5 +130,14 @@ __all__ = [
     "CreateDispatchRuleResponse",
     "SetupInboundSIPRequest",
     "SetupInboundSIPResponse",
+    
+    # Tool Assignments
+    "AssignToolRequest",
+    "UpdateAssignmentRequest",
+    "AssignToolResponse",
+    "DeleteAssignmentRequest",
+    "DeleteAssignmentResponse",
+    "BulkEnableToolsRequest",
+    "BulkEnableToolsResponse",
 ]
 
