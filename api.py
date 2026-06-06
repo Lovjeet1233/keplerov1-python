@@ -22,8 +22,8 @@ from database.tool_store import get_tool_store
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="ISLAND AI",
-    description="API for Island AI",
+    title="Candex AI",
+    description="API for Candex AI",
     version="1.0.0"
 )
 
