@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from config.prompt import ESCALATION_EVAL_PROMPT
 from database.tool_store import get_tool_store
 from services.registered_tools import build_registered_email_tools, build_tool_system_prompt
+from services.tool_builder import get_tool_builder
 from utils.logger import log_info, log_error, log_exception
 from model import (
     ChatRequest,
@@ -281,14 +282,34 @@ async def chat(request: ChatRequest):
             except Exception as e:
                 log_error(f"Failed to initialize ecommerce client: {e}")
         
-        # Initialize email tools from MongoDB templates (user_id) or generic send_email
+        # Initialize tools from MongoDB (CRM + Email) for user_id
+        crm_tools = []
         email_tools = []
         user_tools = {}
+        
         if request.user_id:
+            # Load ALL registered tools for this user (CRM + Email)
             user_tools = get_tool_store().get_tools_by_user_id(request.user_id)
             log_info(
                 f"Loaded {len(user_tools)} registered tool(s) for user_id={request.user_id}"
             )
+            
+            # Build CRM tools using tool_builder
+            try:
+                tool_builder = get_tool_builder(get_tool_store())
+                crm_tools = tool_builder.build_tools_for_user(
+                    user_id=request.user_id,
+                    email_base_url=request.email_credentials.base_url if request.email_credentials else None,
+                    x_user_email=request.email_credentials.x_user_email if request.email_credentials else None,
+                )
+                if crm_tools:
+                    log_info(f"✓ Built {len(crm_tools)} CRM tool(s) for user {request.user_id}")
+                    for tool in crm_tools:
+                        log_info(f"  - {tool.name}: {tool.description[:60]}...")
+            except Exception as e:
+                log_error(f"Failed to build CRM tools: {e}")
+            
+            # Build email tools if credentials provided
             if request.email_credentials and user_tools:
                 email_tools = build_registered_email_tools(
                     user_tools=user_tools,
@@ -349,8 +370,13 @@ async def chat(request: ChatRequest):
             except Exception as e:
                 log_error(f"Failed to initialize email tool: {e}")
         
-        # Combine all tools
-        all_tools = ecommerce_tools + email_tools
+        # Combine all tools (CRM + Ecommerce + Email)
+        all_tools = crm_tools + ecommerce_tools + email_tools
+        
+        if all_tools:
+            log_info(f"✓ Total tools available: {len(all_tools)} (CRM: {len(crm_tools)}, Ecommerce: {len(ecommerce_tools)}, Email: {len(email_tools)})")
+        else:
+            log_info("No tools loaded for this request")
         
         # If no collections specified, search ALL documents (set to None for all-search)
         if not collections:
