@@ -217,6 +217,7 @@ async def authorize(redirect_url: Optional[str] = None):
             upsert=True
         )
         
+        log_info(f"Stored OAuth state with code_verifier (length: {len(code_verifier)}), state: {state[:10]}...")
         log_info(f"Redirecting user to Google OAuth (redirect_url: {redirect_url})")
         return RedirectResponse(url=authorization_url)
     
