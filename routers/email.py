@@ -4,6 +4,8 @@ Email-related API endpoints using Gmail API with OAuth
 
 import os
 import base64
+import secrets
+import hashlib
 from email.message import EmailMessage
 from typing import Optional, List
 from datetime import datetime
@@ -184,15 +186,26 @@ async def authorize(redirect_url: Optional[str] = None):
             redirect_uri=REDIRECT_URI
         )
         
+        # Enable PKCE - Generate code_verifier and code_challenge
+        code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode('utf-8')).digest()
+        ).decode('utf-8').rstrip('=')
+        
+        flow.code_verifier = code_verifier
+        
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
-            prompt='consent'
+            prompt='consent',
+            code_challenge=code_challenge,
+            code_challenge_method='S256'
         )
         
-        # Store state and redirect_url in MongoDB temporarily
+        # Store state, code_verifier and redirect_url in MongoDB temporarily
         state_data = {
             'state': state,
+            'code_verifier': code_verifier,
             'timestamp': datetime.utcnow()
         }
         if redirect_url:
@@ -227,10 +240,17 @@ async def oauth2callback(code: str, state: Optional[str] = None):
         # Relax token scope validation (allows Google to return additional granted scopes)
         os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
         
-        # Retrieve stored state and redirect_url from MongoDB
+        # Retrieve stored state, code_verifier and redirect_url from MongoDB
         state_doc = _collection.find_one({'_id': 'oauth_state'})
-        stored_state = state_doc.get('state') if state_doc else None
-        redirect_url = state_doc.get('redirect_url') if state_doc else None
+        if not state_doc:
+            log_error("OAuth state not found in MongoDB. User needs to restart authorization.")
+            raise HTTPException(status_code=400, detail="OAuth state not found. Please restart authorization.")
+        
+        stored_state = state_doc.get('state')
+        code_verifier = state_doc.get('code_verifier')
+        redirect_url = state_doc.get('redirect_url')
+        
+        log_info(f"Retrieved OAuth state - has code_verifier: {bool(code_verifier)}, state match: {stored_state == state}")
         
         # Create flow with or without state validation
         if stored_state and state and stored_state == state:
@@ -246,8 +266,12 @@ async def oauth2callback(code: str, state: Optional[str] = None):
                 scopes=SCOPES,
                 redirect_uri=REDIRECT_URI
             )
-
-        flow.fetch_token(code=code)
+        
+        # Fetch token with PKCE code_verifier
+        if code_verifier:
+            flow.fetch_token(code=code, code_verifier=code_verifier)
+        else:
+            flow.fetch_token(code=code)
         credentials = flow.credentials
         
         user_email = _get_user_email_from_google(credentials)
