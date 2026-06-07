@@ -243,11 +243,14 @@ async def oauth2callback(code: str, state: Optional[str] = None):
         # Retrieve stored state, code_verifier and redirect_url from MongoDB
         state_doc = _collection.find_one({'_id': 'oauth_state'})
         if not state_doc:
+            log_error("OAuth state not found in MongoDB. User needs to restart authorization.")
             raise HTTPException(status_code=400, detail="OAuth state not found. Please restart authorization.")
         
         stored_state = state_doc.get('state')
         code_verifier = state_doc.get('code_verifier')
         redirect_url = state_doc.get('redirect_url')
+        
+        log_info(f"Retrieved OAuth state - has code_verifier: {bool(code_verifier)}, state match: {stored_state == state}")
         
         # Create flow with or without state validation
         if stored_state and state and stored_state == state:
@@ -264,11 +267,11 @@ async def oauth2callback(code: str, state: Optional[str] = None):
                 redirect_uri=REDIRECT_URI
             )
         
-        # Set the code_verifier for PKCE
+        # Fetch token with PKCE code_verifier
         if code_verifier:
-            flow.code_verifier = code_verifier
-
-        flow.fetch_token(code=code)
+            flow.fetch_token(code=code, code_verifier=code_verifier)
+        else:
+            flow.fetch_token(code=code)
         credentials = flow.credentials
         
         user_email = _get_user_email_from_google(credentials)
