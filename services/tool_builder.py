@@ -11,6 +11,7 @@ from crm_integration import (
     build_crm_create_tool,
     build_crm_update_tool,
 )
+from http_integration import build_http_tool
 from services.registered_tools import build_registered_email_tools
 from utils.logger import log_info, log_error, log_warning
 
@@ -66,6 +67,11 @@ class ToolBuilder:
                         crm_tool = self._build_crm_tool(tool_schema, tool_name)
                         if crm_tool:
                             tools.append(crm_tool)
+
+                    elif tool_type == "http":
+                        http_tool = self._build_http_tool(tool_schema, tool_name, tool_data.get("description"))
+                        if http_tool:
+                            tools.append(http_tool)
 
                     elif tool_type == "email":
                         if email_base_url and x_user_email:
@@ -169,6 +175,43 @@ class ToolBuilder:
 
         except Exception as e:
             log_error(f"Error building CRM tool: {str(e)}")
+            return None
+
+    def _build_http_tool(
+        self, tool_schema: Dict[str, Any], tool_name: str, tool_description: str
+    ) -> StructuredTool:
+        """
+        Build an HTTP tool from tool schema.
+
+        Args:
+            tool_schema: Tool schema with configuration
+            tool_name: Name of the HTTP tool
+            tool_description: Description of the tool
+
+        Returns:
+            StructuredTool instance or None
+        """
+        try:
+            method = tool_schema.get("method")
+            url = tool_schema.get("url")
+            parameters = tool_schema.get("parameters", [])
+            headers = tool_schema.get("headers", {})
+
+            if not method or not url:
+                log_error(f"HTTP tool missing method or URL")
+                return None
+
+            return build_http_tool(
+                tool_name=tool_name,
+                tool_description=tool_description,
+                method=method,
+                url=url,
+                parameters=parameters,
+                headers=headers,
+            )
+
+        except Exception as e:
+            log_error(f"Error building HTTP tool: {str(e)}")
             return None
 
     def _build_email_tools(
