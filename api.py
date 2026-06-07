@@ -18,6 +18,7 @@ from routers.sms import router as sms_router
 from routers.email import router as email_router
 from routers.tools import router as tools_router, init_tools_router
 from routers.crm import router as crm_router, init_crm_router
+from routers.http_tools import router as http_tools_router, init_http_tools_router
 from database.tool_store import get_tool_store
 
 # Initialize FastAPI app
@@ -95,8 +96,9 @@ except Exception as e:
     log_error(f"Failed to initialize Tool Store: {str(e)}")
     raise
 
-# Initialize CRM router
+# Initialize CRM and HTTP tools routers
 init_crm_router(tool_store)
+init_http_tools_router(tool_store)
 
 # Initialize routers with service instances
 init_rag_router(rag_service, rag_workflow, mongodb_manager)
@@ -109,6 +111,7 @@ app.include_router(sms_router)
 app.include_router(email_router)
 app.include_router(tools_router)
 app.include_router(crm_router)
+app.include_router(http_tools_router)
 
 
 @app.get("/")
@@ -170,6 +173,15 @@ async def root():
                     "DELETE /crm/tools/{tool_id} - Delete CRM tool",
                     "GET /crm/tools?user_id={user_id} - Get all CRM tools for user"
                 ]
+            },
+            "HTTP Tool Registration": {
+                "prefix": "/http-tools",
+                "endpoints": [
+                    "POST /http-tools/register - Register custom HTTP tool for user",
+                    "PATCH /http-tools/tools/{tool_id} - Update HTTP tool configuration",
+                    "DELETE /http-tools/tools/{tool_id} - Delete HTTP tool",
+                    "GET /http-tools/tools?user_id={user_id} - Get all HTTP tools for user"
+                ]
             }
         }
     }
@@ -187,7 +199,8 @@ async def health_check():
             "sms": "operational",
             "email": "operational",
             "tools": "operational",
-            "crm": "operational"
+            "crm": "operational",
+            "http_tools": "operational"
         }
     }
 

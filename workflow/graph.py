@@ -27,7 +27,9 @@ class GraphState(TypedDict):
         answer: Generated answer
         thread_id: Thread ID for conversation memory
         conversation_history: List of previous Q&A pairs
+        conversation_summary: Summarized history of older conversations
         system_prompt: Custom system prompt (optional)
+        system_prompt_sent: Flag to track if system prompt was already sent
         provider: LLM provider ("openai" or "gemini")
         api_key: API key for the provider
     """
@@ -40,7 +42,9 @@ class GraphState(TypedDict):
     answer: str
     thread_id: Optional[str]
     conversation_history: List[dict]
+    conversation_summary: Optional[str]  # Summarized older conversations
     system_prompt: Optional[str]
+    system_prompt_sent: Optional[bool]  # Track if system prompt already sent
     provider: Optional[str]
     api_key: Optional[str]
 
@@ -148,6 +152,60 @@ class RAGWorkflow:
         """Clear the LLM cache (useful if API keys change or memory needs to be freed)"""
         self.llm_cache.clear()
         log_info("LLM cache cleared")
+    
+    def _summarize_conversation_history(self, conversation_history: List[dict], openai_api_key: str) -> str:
+        """
+        Summarize conversation history using OpenAI to compress old conversations.
+        
+        Args:
+            conversation_history: List of conversation turns to summarize
+            openai_api_key: OpenAI API key for summarization
+            
+        Returns:
+            Summarized conversation text
+        """
+        try:
+            log_info(f"Summarizing {len(conversation_history)} conversation turns...")
+            
+            # Build conversation text
+            conversation_text = ""
+            for i, turn in enumerate(conversation_history, 1):
+                conversation_text += f"Turn {i}:\nUser: {turn['query']}\nAssistant: {turn['answer']}\n\n"
+            
+            # Create summarization prompt
+            summarization_prompt = f"""You are a conversation summarizer. Your task is to create a concise but comprehensive summary of the following conversation that preserves all important context, facts, decisions, and user preferences.
+
+The summary should:
+1. Capture key topics discussed
+2. Preserve important facts, numbers, and specific details
+3. Note any decisions made or preferences expressed
+4. Maintain chronological flow of important events
+5. Be concise but complete (aim for 30-50% of original length)
+
+Conversation to summarize:
+{conversation_text}
+
+Provide a clear, well-structured summary:"""
+            
+            # Use OpenAI for summarization
+            summarization_llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.3,
+                openai_api_key=openai_api_key
+            )
+            
+            response = summarization_llm.invoke([HumanMessage(content=summarization_prompt)])
+            summary = response.content
+            
+            log_info(f"✓ Conversation summarized: {len(conversation_text)} chars -> {len(summary)} chars")
+            return summary
+            
+        except Exception as e:
+            log_error(f"Error summarizing conversation: {str(e)}")
+            # Fallback: return a simple concatenation
+            return "Previous conversation context: " + " | ".join(
+                [f"Q: {t['query'][:50]}... A: {t['answer'][:50]}..." for t in conversation_history[:5]]
+            )
     
     def _build_graph(self) -> StateGraph:
         """
@@ -286,16 +344,24 @@ class RAGWorkflow:
                 llm = llm.bind_tools(ecommerce_tools)
                 log_info(f"✓ Bound {len(ecommerce_tools)} ecommerce tools to LLM ({provider})")
             
-            # Build conversation history context (OPTIMIZED: minimal format)
+            # OPTIMIZATION: Build conversation context with summary + recent history (NO TRUNCATION)
             history_context = ""
+            
+            # Include conversation summary if exists (compressed old conversations)
+            if state.get("conversation_summary"):
+                history_context += f"\n\nPrevious Conversation Summary:\n{state['conversation_summary']}\n"
+                log_info(f"Including conversation summary ({len(state['conversation_summary'])} chars)")
+            
+            # Include recent conversation history (last 5 turns, NO truncation)
             if state.get("conversation_history"):
-                history_items = []
-                for item in state["conversation_history"][-2:]:  # Last 2 turns only
-                    # Truncate long answers to save tokens (150 chars max)
-                    answer_preview = item['answer'][:150] + "..." if len(item['answer']) > 150 else item['answer']
-                    history_items.append(f"Q: {item['query']}\nA: {answer_preview}")
-                if history_items:
-                    history_context = "\n\nHistory:\n" + "\n".join(history_items)
+                recent_history = state["conversation_history"][-5:]  # Last 5 turns (increased from 2)
+                if recent_history:
+                    history_items = []
+                    for item in recent_history:
+                        # NO TRUNCATION - include full query and answer
+                        history_items.append(f"User: {item['query']}\nAssistant: {item['answer']}")
+                    history_context += "\n\nRecent Conversation:\n" + "\n\n".join(history_items)
+                    log_info(f"Including {len(recent_history)} recent conversation turns (full content)")
             
             # Check if we have context from retrieval
             has_retrieval_context = (
@@ -304,17 +370,25 @@ class RAGWorkflow:
                 state["context"] != "Error retrieving documents from knowledge base."
             )
             
-            # Build the prompt based on available information
-            # Use custom system prompt if provided, otherwise use default
-            system_prompt_content = state.get("system_prompt") or SYSTEM_PROMPT
-            if ecommerce_tools:
-                # Check which tools are available
-                tool_names = [t.name for t in ecommerce_tools]
-                has_ecommerce = "get_products" in tool_names or "get_orders" in tool_names
-                has_email = "send_email" in tool_names
+            # OPTIMIZATION: Only send system prompt on first message in thread
+            # Check if system prompt was already sent in this thread
+            is_first_message = not state.get("system_prompt_sent", False)
+            
+            messages = []
+            
+            if is_first_message:
+                # First message - send full system prompt
+                system_prompt_content = state.get("system_prompt") or SYSTEM_PROMPT
                 
-                if has_ecommerce:
-                    system_prompt_content += """
+                # Add tool instructions if tools are available
+                if ecommerce_tools:
+                    # Check which tools are available
+                    tool_names = [t.name for t in ecommerce_tools]
+                    has_ecommerce = "get_products" in tool_names or "get_orders" in tool_names
+                    has_email = "send_email" in tool_names
+                    
+                    if has_ecommerce:
+                        system_prompt_content += """
 
 IMPORTANT: You have access to ecommerce tools that connect to a real store. You MUST use these tools when users ask about:
 - Products, items, catalog, inventory, stock, or what's available
@@ -326,9 +400,9 @@ When a user asks about products or orders, ALWAYS call the appropriate tool firs
 Available ecommerce tools:
 - get_products: Use this to fetch current products from the store
 - get_orders: Use this to fetch recent orders from the store"""
-                
-                if has_email:
-                    system_prompt_content += """
+                    
+                    if has_email:
+                        system_prompt_content += """
 
 IMPORTANT: You have access to an email tool. You MUST use this tool when:
 - The user wants to send an email
@@ -340,7 +414,15 @@ When sending emails, ALWAYS use the send_email tool with the recipient's email a
 
 Available email tool:
 - send_email: Use this to send an email. Requires: to (recipient email), subject (email subject), body (email content)"""
-            messages = [SystemMessage(content=system_prompt_content)]
+                
+                messages.append(SystemMessage(content=system_prompt_content))
+                log_info(f"✓ Sending system prompt (first message, {len(system_prompt_content)} chars)")
+                
+                # Mark system prompt as sent
+                state["system_prompt_sent"] = True
+            else:
+                # Follow-up message - NO system prompt, rely on conversation history
+                log_info("✓ Skipping system prompt (already sent in this thread)")
             
             if has_retrieval_context:
                 # Use RAG template with retrieved context
@@ -467,6 +549,33 @@ Available email tool:
                 "answer": state["answer"]
             })
             
+            # OPTIMIZATION: Auto-summarize after 15 turns to maintain context without token bloat
+            history_length = len(state["conversation_history"])
+            if history_length >= 15:
+                log_info(f"⚡ Conversation has {history_length} turns - triggering summarization")
+                
+                # Get API key for summarization (prefer user's key, fallback to default)
+                summarization_key = api_key if provider == "openai" else self.llm.openai_api_key
+                
+                # Summarize the first 10 turns (keep last 5 as recent history)
+                turns_to_summarize = state["conversation_history"][:10]
+                
+                # Generate summary
+                new_summary = self._summarize_conversation_history(turns_to_summarize, summarization_key)
+                
+                # Combine with existing summary if present
+                if state.get("conversation_summary"):
+                    combined_summary = f"{state['conversation_summary']}\n\n--- Additional Context ---\n{new_summary}"
+                    state["conversation_summary"] = combined_summary
+                    log_info(f"✓ Combined with existing summary (total: {len(combined_summary)} chars)")
+                else:
+                    state["conversation_summary"] = new_summary
+                    log_info(f"✓ Created new conversation summary ({len(new_summary)} chars)")
+                
+                # Keep only the last 5 turns in full history
+                state["conversation_history"] = state["conversation_history"][10:]
+                log_info(f"✓ Compressed history: 15 turns -> summary + 5 recent turns")
+            
             log_info(f"⏱️ GENERATE: Total node completed in {(perf_time.time() - generate_start)*1000:.0f}ms")
             log_debug(f"Generated answer: {state['answer'][:100]}...")
             
@@ -536,8 +645,11 @@ Available email tool:
                 }
             }
             
-            # OPTIMIZATION: Retrieve conversation history from checkpointer (optional for performance)
+            # OPTIMIZATION: Retrieve conversation state from checkpointer (history + summary + flags)
             conversation_history = []
+            conversation_summary = None
+            system_prompt_sent = False
+            
             if not skip_history and thread_id:  # Only fetch history if thread_id is provided
                 history_start = perf_time.time()
                 try:
@@ -545,15 +657,27 @@ Available email tool:
                     state_snapshot = self.graph.get_state(config)
                     if state_snapshot and hasattr(state_snapshot, 'values') and state_snapshot.values:
                         existing_history = state_snapshot.values.get("conversation_history", [])
+                        existing_summary = state_snapshot.values.get("conversation_summary")
+                        existing_prompt_flag = state_snapshot.values.get("system_prompt_sent", False)
+                        
                         if existing_history:
                             conversation_history = existing_history
                             log_info(f"Retrieved {len(conversation_history)} previous conversation turns in {(perf_time.time() - history_start)*1000:.0f}ms")
+                        
+                        if existing_summary:
+                            conversation_summary = existing_summary
+                            log_info(f"Retrieved conversation summary ({len(existing_summary)} chars)")
+                        
+                        if existing_prompt_flag:
+                            system_prompt_sent = True
+                            log_info("System prompt already sent in this thread")
+                            
                 except Exception as e:
-                    log_debug(f"No previous conversation history found or error retrieving: {str(e)}")
+                    log_debug(f"No previous conversation state found or error retrieving: {str(e)}")
             else:
                 log_debug("Skipping conversation history lookup (no thread_id or skip_history=True)")
             
-            # Initialize state with conversation history
+            # Initialize state with conversation history, summary, and flags
             initial_state = {
                 "query": query,
                 "collection_name": collection_name,  # Keep for backward compatibility
@@ -564,7 +688,9 @@ Available email tool:
                 "answer": "",
                 "thread_id": thread_id,
                 "conversation_history": conversation_history,
+                "conversation_summary": conversation_summary,
                 "system_prompt": system_prompt,
+                "system_prompt_sent": system_prompt_sent,
                 "provider": provider,
                 "api_key": api_key
             }
